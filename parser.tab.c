@@ -76,6 +76,69 @@
 void yyerror(const char *s);
 int yylex(void);
 
+int current_line = 1;
+int current_col = 1;
+int json_output_mode = 0;
+int compilation_failed = 0;
+
+/* =========================================================
+   DIAGNOSTICS & TOKENS TRACING
+   ========================================================= */
+
+typedef struct {
+    char type[32];
+    char lexeme[64];
+    int line;
+    int col;
+} TokenRecord;
+
+#define MAX_TOKENS 2000
+TokenRecord token_records[MAX_TOKENS];
+int token_count = 0;
+
+void record_token(const char *type, const char *lexeme, int line, int col) {
+    if (token_count < MAX_TOKENS) {
+        strncpy(token_records[token_count].type, type, 31);
+        strncpy(token_records[token_count].lexeme, lexeme, 63);
+        token_records[token_count].line = line;
+        token_records[token_count].col = col;
+        token_count++;
+    }
+}
+
+typedef struct {
+    char severity[16];
+    char message[256];
+    int line;
+    int col;
+} Diagnostic;
+
+#define MAX_DIAGNOSTICS 100
+Diagnostic diagnostics[MAX_DIAGNOSTICS];
+int diag_count = 0;
+
+void add_diagnostic(const char *severity, const char *message, int line, int col) {
+    if (diag_count < MAX_DIAGNOSTICS) {
+        strncpy(diagnostics[diag_count].severity, severity, 15);
+        strncpy(diagnostics[diag_count].message, message, 255);
+        diagnostics[diag_count].line = line;
+        diagnostics[diag_count].col = col;
+        diag_count++;
+    }
+    if (strcmp(severity, "error") == 0) {
+        compilation_failed = 1;
+    }
+}
+
+void record_lexical_error(const char *msg, int line, int col) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "Lexical Error: Unrecognized character '%s'", msg);
+    add_diagnostic("error", buf, line, col);
+    if (!json_output_mode) {
+        fprintf(stderr, "%s at line %d, col %d\n", buf, line, col);
+    }
+}
+
 /* =========================================================
    NODE STRUCTURE FOR BACKPATCH LISTS
    ========================================================= */
@@ -87,34 +150,34 @@ struct Node {
     Node *next;
 };
 
-
 /* =========================================================
    QUADRUPLE / THREE-ADDRESS CODE STRUCTURE
    ========================================================= */
 
 typedef struct {
-    char op[10];
+    int id;
+    char op[16];
     char arg1[32];
     char arg2[32];
     char result[32];
+    int line;
+    int col;
 } Quad;
 
-
-/* =========================================================
-   GLOBAL CODE GENERATION TABLE
-   ========================================================= */
-
-Quad quad_table[500];
-
+#define MAX_QUADS 1000
+Quad quad_table[MAX_QUADS];
 int quad_count = 0;
 int temp_var_count = 0;
 
 typedef struct {
+    char event_type[16]; // "makelist", "merge", "backpatch"
     int from_quad;
     int target_quad;
+    char desc[128];
 } BackpatchLog;
 
-BackpatchLog bp_logs[200];
+#define MAX_BP_LOGS 500
+BackpatchLog bp_logs[MAX_BP_LOGS];
 int bp_log_count = 0;
 
 /* =========================================================
@@ -122,31 +185,19 @@ int bp_log_count = 0;
    ========================================================= */
 
 int nextquad();
-
-void emit(
-    const char *op,
-    const char *arg1,
-    const char *arg2,
-    const char *result
-);
-
+void emit_loc(const char *op, const char *arg1, const char *arg2, const char *result, int line, int col);
+void emit(const char *op, const char *arg1, const char *arg2, const char *result);
 char* newtemp();
-
 Node* makelist(int index);
-
 Node* merge(Node *l1, Node *l2);
-
 void backpatch(Node *list, int target_quad);
-
 void print_tac();
-
 void print_quads();
-
 void execute_tac();
+void output_json();
 
 
-
-#line 150 "parser.tab.c"
+#line 201 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -478,13 +529,15 @@ void free (void *); /* INFRINGES ON USER NAME SPACE */
 
 #if (! defined yyoverflow \
      && (! defined __cplusplus \
-         || (defined YYSTYPE_IS_TRIVIAL && YYSTYPE_IS_TRIVIAL)))
+         || (defined YYLTYPE_IS_TRIVIAL && YYLTYPE_IS_TRIVIAL \
+             && defined YYSTYPE_IS_TRIVIAL && YYSTYPE_IS_TRIVIAL)))
 
 /* A type that is properly aligned for any stack member.  */
 union yyalloc
 {
   yy_state_t yyss_alloc;
   YYSTYPE yyvs_alloc;
+  YYLTYPE yyls_alloc;
 };
 
 /* The size of the maximum gap between one aligned stack and the next.  */
@@ -493,8 +546,9 @@ union yyalloc
 /* The size of an array large to enough to hold all stacks, each with
    N elements.  */
 # define YYSTACK_BYTES(N) \
-     ((N) * (YYSIZEOF (yy_state_t) + YYSIZEOF (YYSTYPE)) \
-      + YYSTACK_GAP_MAXIMUM)
+     ((N) * (YYSIZEOF (yy_state_t) + YYSIZEOF (YYSTYPE) \
+             + YYSIZEOF (YYLTYPE)) \
+      + 2 * YYSTACK_GAP_MAXIMUM)
 
 # define YYCOPY_NEEDED 1
 
@@ -600,10 +654,10 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,   147,   147,   168,   179,   192,   211,   229,   241,   253,
-     261,   268,   279,   296,   329,   354,   353,   406,   435,   442,
-     466,   490,   514,   538,   562,   592,   598,   613,   628,   643,
-     658,   664
+       0,   163,   163,   173,   178,   186,   193,   200,   207,   214,
+     220,   226,   232,   238,   246,   257,   256,   272,   279,   285,
+     293,   301,   309,   317,   325,   335,   340,   347,   354,   361,
+     368,   373
 };
 #endif
 
@@ -796,6 +850,32 @@ enum { YYENOMEM = -2 };
    Use YYerror or YYUNDEF. */
 #define YYERRCODE YYUNDEF
 
+/* YYLLOC_DEFAULT -- Set CURRENT to span from RHS[1] to RHS[N].
+   If N is 0, then set CURRENT to the empty location which ends
+   the previous symbol: RHS[0] (always defined).  */
+
+#ifndef YYLLOC_DEFAULT
+# define YYLLOC_DEFAULT(Current, Rhs, N)                                \
+    do                                                                  \
+      if (N)                                                            \
+        {                                                               \
+          (Current).first_line   = YYRHSLOC (Rhs, 1).first_line;        \
+          (Current).first_column = YYRHSLOC (Rhs, 1).first_column;      \
+          (Current).last_line    = YYRHSLOC (Rhs, N).last_line;         \
+          (Current).last_column  = YYRHSLOC (Rhs, N).last_column;       \
+        }                                                               \
+      else                                                              \
+        {                                                               \
+          (Current).first_line   = (Current).last_line   =              \
+            YYRHSLOC (Rhs, 0).last_line;                                \
+          (Current).first_column = (Current).last_column =              \
+            YYRHSLOC (Rhs, 0).last_column;                              \
+        }                                                               \
+    while (0)
+#endif
+
+#define YYRHSLOC(Rhs, K) ((Rhs)[K])
+
 
 /* Enable debugging if requested.  */
 #if YYDEBUG
@@ -812,6 +892,63 @@ do {                                            \
 } while (0)
 
 
+/* YYLOCATION_PRINT -- Print the location on the stream.
+   This macro was not mandated originally: define only if we know
+   we won't break user code: when these are the locations we know.  */
+
+# ifndef YYLOCATION_PRINT
+
+#  if defined YY_LOCATION_PRINT
+
+   /* Temporary convenience wrapper in case some people defined the
+      undocumented and private YY_LOCATION_PRINT macros.  */
+#   define YYLOCATION_PRINT(File, Loc)  YY_LOCATION_PRINT(File, *(Loc))
+
+#  elif defined YYLTYPE_IS_TRIVIAL && YYLTYPE_IS_TRIVIAL
+
+/* Print *YYLOCP on YYO.  Private, do not rely on its existence. */
+
+YY_ATTRIBUTE_UNUSED
+static int
+yy_location_print_ (FILE *yyo, YYLTYPE const * const yylocp)
+{
+  int res = 0;
+  int end_col = 0 != yylocp->last_column ? yylocp->last_column - 1 : 0;
+  if (0 <= yylocp->first_line)
+    {
+      res += YYFPRINTF (yyo, "%d", yylocp->first_line);
+      if (0 <= yylocp->first_column)
+        res += YYFPRINTF (yyo, ".%d", yylocp->first_column);
+    }
+  if (0 <= yylocp->last_line)
+    {
+      if (yylocp->first_line < yylocp->last_line)
+        {
+          res += YYFPRINTF (yyo, "-%d", yylocp->last_line);
+          if (0 <= end_col)
+            res += YYFPRINTF (yyo, ".%d", end_col);
+        }
+      else if (0 <= end_col && yylocp->first_column < end_col)
+        res += YYFPRINTF (yyo, "-%d", end_col);
+    }
+  return res;
+}
+
+#   define YYLOCATION_PRINT  yy_location_print_
+
+    /* Temporary convenience wrapper in case some people defined the
+       undocumented and private YY_LOCATION_PRINT macros.  */
+#   define YY_LOCATION_PRINT(File, Loc)  YYLOCATION_PRINT(File, &(Loc))
+
+#  else
+
+#   define YYLOCATION_PRINT(File, Loc) ((void) 0)
+    /* Temporary convenience wrapper in case some people defined the
+       undocumented and private YY_LOCATION_PRINT macros.  */
+#   define YY_LOCATION_PRINT  YYLOCATION_PRINT
+
+#  endif
+# endif /* !defined YYLOCATION_PRINT */
 
 
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)                    \
@@ -820,7 +957,7 @@ do {                                                                      \
     {                                                                     \
       YYFPRINTF (stderr, "%s ", Title);                                   \
       yy_symbol_print (stderr,                                            \
-                  Kind, Value); \
+                  Kind, Value, Location); \
       YYFPRINTF (stderr, "\n");                                           \
     }                                                                     \
 } while (0)
@@ -832,10 +969,11 @@ do {                                                                      \
 
 static void
 yy_symbol_value_print (FILE *yyo,
-                       yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep)
+                       yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep, YYLTYPE const * const yylocationp)
 {
   FILE *yyoutput = yyo;
   YY_USE (yyoutput);
+  YY_USE (yylocationp);
   if (!yyvaluep)
     return;
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
@@ -850,12 +988,14 @@ yy_symbol_value_print (FILE *yyo,
 
 static void
 yy_symbol_print (FILE *yyo,
-                 yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep)
+                 yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep, YYLTYPE const * const yylocationp)
 {
   YYFPRINTF (yyo, "%s %s (",
              yykind < YYNTOKENS ? "token" : "nterm", yysymbol_name (yykind));
 
-  yy_symbol_value_print (yyo, yykind, yyvaluep);
+  YYLOCATION_PRINT (yyo, yylocationp);
+  YYFPRINTF (yyo, ": ");
+  yy_symbol_value_print (yyo, yykind, yyvaluep, yylocationp);
   YYFPRINTF (yyo, ")");
 }
 
@@ -888,7 +1028,7 @@ do {                                                            \
 `------------------------------------------------*/
 
 static void
-yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp,
+yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp, YYLTYPE *yylsp,
                  int yyrule)
 {
   int yylno = yyrline[yyrule];
@@ -902,7 +1042,8 @@ yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp,
       YYFPRINTF (stderr, "   $%d = ", yyi + 1);
       yy_symbol_print (stderr,
                        YY_ACCESSING_SYMBOL (+yyssp[yyi + 1 - yynrhs]),
-                       &yyvsp[(yyi + 1) - (yynrhs)]);
+                       &yyvsp[(yyi + 1) - (yynrhs)],
+                       &(yylsp[(yyi + 1) - (yynrhs)]));
       YYFPRINTF (stderr, "\n");
     }
 }
@@ -910,7 +1051,7 @@ yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp,
 # define YY_REDUCE_PRINT(Rule)          \
 do {                                    \
   if (yydebug)                          \
-    yy_reduce_print (yyssp, yyvsp, Rule); \
+    yy_reduce_print (yyssp, yyvsp, yylsp, Rule); \
 } while (0)
 
 /* Nonzero means print parse trace.  It is left uninitialized so that
@@ -951,9 +1092,10 @@ int yydebug;
 
 static void
 yydestruct (const char *yymsg,
-            yysymbol_kind_t yykind, YYSTYPE *yyvaluep)
+            yysymbol_kind_t yykind, YYSTYPE *yyvaluep, YYLTYPE *yylocationp)
 {
   YY_USE (yyvaluep);
+  YY_USE (yylocationp);
   if (!yymsg)
     yymsg = "Deleting";
   YY_SYMBOL_PRINT (yymsg, yykind, yyvaluep, yylocationp);
@@ -969,6 +1111,12 @@ int yychar;
 
 /* The semantic value of the lookahead symbol.  */
 YYSTYPE yylval;
+/* Location data for the lookahead symbol.  */
+YYLTYPE yylloc
+# if defined YYLTYPE_IS_TRIVIAL && YYLTYPE_IS_TRIVIAL
+  = { 1, 1, 1, 1 }
+# endif
+;
 /* Number of syntax errors so far.  */
 int yynerrs;
 
@@ -1002,6 +1150,11 @@ yyparse (void)
     YYSTYPE *yyvs = yyvsa;
     YYSTYPE *yyvsp = yyvs;
 
+    /* The location stack: array, bottom, top.  */
+    YYLTYPE yylsa[YYINITDEPTH];
+    YYLTYPE *yyls = yylsa;
+    YYLTYPE *yylsp = yyls;
+
   int yyn;
   /* The return value of yyparse.  */
   int yyresult;
@@ -1010,10 +1163,14 @@ yyparse (void)
   /* The variables used to return semantic value and location from the
      action routines.  */
   YYSTYPE yyval;
+  YYLTYPE yyloc;
+
+  /* The locations where the error started and ended.  */
+  YYLTYPE yyerror_range[3];
 
 
 
-#define YYPOPSTACK(N)   (yyvsp -= (N), yyssp -= (N))
+#define YYPOPSTACK(N)   (yyvsp -= (N), yyssp -= (N), yylsp -= (N))
 
   /* The number of symbols on the RHS of the reduced rule.
      Keep to zero when no symbol should be popped.  */
@@ -1023,6 +1180,7 @@ yyparse (void)
 
   yychar = YYEMPTY; /* Cause a token to be read.  */
 
+  yylsp[0] = yylloc;
   goto yysetstate;
 
 
@@ -1061,6 +1219,7 @@ yysetstate:
            memory.  */
         yy_state_t *yyss1 = yyss;
         YYSTYPE *yyvs1 = yyvs;
+        YYLTYPE *yyls1 = yyls;
 
         /* Each stack pointer address is followed by the size of the
            data in use in that stack, in bytes.  This used to be a
@@ -1069,9 +1228,11 @@ yysetstate:
         yyoverflow (YY_("memory exhausted"),
                     &yyss1, yysize * YYSIZEOF (*yyssp),
                     &yyvs1, yysize * YYSIZEOF (*yyvsp),
+                    &yyls1, yysize * YYSIZEOF (*yylsp),
                     &yystacksize);
         yyss = yyss1;
         yyvs = yyvs1;
+        yyls = yyls1;
       }
 # else /* defined YYSTACK_RELOCATE */
       /* Extend the stack our own way.  */
@@ -1090,6 +1251,7 @@ yysetstate:
           YYNOMEM;
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
+        YYSTACK_RELOCATE (yyls_alloc, yyls);
 #  undef YYSTACK_RELOCATE
         if (yyss1 != yyssa)
           YYSTACK_FREE (yyss1);
@@ -1098,6 +1260,7 @@ yysetstate:
 
       yyssp = yyss + yysize - 1;
       yyvsp = yyvs + yysize - 1;
+      yylsp = yyls + yysize - 1;
 
       YY_IGNORE_USELESS_CAST_BEGIN
       YYDPRINTF ((stderr, "Stack size increased to %ld\n",
@@ -1151,6 +1314,7 @@ yybackup:
          loop in error recovery. */
       yychar = YYUNDEF;
       yytoken = YYSYMBOL_YYerror;
+      yyerror_range[1] = yylloc;
       goto yyerrlab1;
     }
   else
@@ -1184,6 +1348,7 @@ yybackup:
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   *++yyvsp = yylval;
   YY_IGNORE_MAYBE_UNINITIALIZED_END
+  *++yylsp = yylloc;
 
   /* Discard the shifted token.  */
   yychar = YYEMPTY;
@@ -1217,519 +1382,305 @@ yyreduce:
      GCC warning that YYVAL may be used uninitialized.  */
   yyval = yyvsp[1-yylen];
 
-
+  /* Default location. */
+  YYLLOC_DEFAULT (yyloc, (yylsp - yylen), yylen);
+  yyerror_range[1] = yyloc;
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
   case 2: /* PROG: S_LIST  */
-#line 148 "parser.y"
+#line 164 "parser.y"
       {
-          /*
-           * Any unresolved nextlist at the end of the
-           * program is patched to the first quad after
-           * the program.
-           */
           backpatch((yyvsp[0].stmt).nextlist, quad_count);
-
-          printf(
-              "\n--- GENERATING INTERMEDIATE CODE ---\n"
-          );
+          if (!json_output_mode) {
+              printf("\n--- GENERATING INTERMEDIATE CODE ---\n");
+          }
       }
-#line 1239 "parser.tab.c"
+#line 1400 "parser.tab.c"
     break;
 
   case 3: /* S_LIST: S_LIST M S  */
-#line 169 "parser.y"
+#line 174 "parser.y"
       {
-          /*
-           * The previous statement's unresolved jumps
-           * continue at the beginning of the current statement.
-           */
           backpatch((yyvsp[-2].stmt).nextlist, (yyvsp[-1].quad_num));
-
           (yyval.stmt).nextlist = (yyvsp[0].stmt).nextlist;
       }
-#line 1253 "parser.tab.c"
+#line 1409 "parser.tab.c"
     break;
 
   case 4: /* S_LIST: S  */
-#line 180 "parser.y"
+#line 179 "parser.y"
       {
           (yyval.stmt).nextlist = (yyvsp[0].stmt).nextlist;
       }
-#line 1261 "parser.tab.c"
+#line 1417 "parser.tab.c"
     break;
 
   case 5: /* M: %empty  */
-#line 192 "parser.y"
+#line 186 "parser.y"
       {
-          /*
-           * M records the current quad number.
-           *
-           * This is the key mechanism used to remember
-           * control-flow destinations during translation.
-           */
           (yyval.quad_num) = nextquad();
-      }
-#line 1275 "parser.tab.c"
-    break;
-
-  case 6: /* N: %empty  */
-#line 211 "parser.y"
-      {
-          /*
-           * Create a list containing the current quad.
-           * The actual target will be determined later
-           * through backpatching.
-           */
-          (yyval.stmt).nextlist = makelist(nextquad());
-
-          emit("goto", "", "", "_");
-      }
-#line 1290 "parser.tab.c"
-    break;
-
-  case 7: /* FOR_INIT: ID ASSIGN E  */
-#line 230 "parser.y"
-      {
-          emit("=", (yyvsp[0].str), "", (yyvsp[-2].str));
-      }
-#line 1298 "parser.tab.c"
-    break;
-
-  case 8: /* FOR_STEP: ID ASSIGN E  */
-#line 242 "parser.y"
-      {
-          emit("=", (yyvsp[0].str), "", (yyvsp[-2].str));
-      }
-#line 1306 "parser.tab.c"
-    break;
-
-  case 9: /* S: ID ASSIGN E SEMI  */
-#line 254 "parser.y"
-      {
-          emit("=", (yyvsp[-1].str), "", (yyvsp[-3].str));
-
-          (yyval.stmt).nextlist = NULL;
-      }
-#line 1316 "parser.tab.c"
-    break;
-
-  case 10: /* S: PRINT LPAREN E RPAREN SEMI  */
-#line 262 "parser.y"
-      {
-          emit("print", (yyvsp[-2].str), "", "");
-
-          (yyval.stmt).nextlist = NULL;
-      }
-#line 1326 "parser.tab.c"
-    break;
-
-  case 11: /* S: PRINT LPAREN STRING_LITERAL RPAREN SEMI  */
-#line 269 "parser.y"
-      {
-          emit("print_str", (yyvsp[-2].str), "", "");
-          (yyval.stmt).nextlist = NULL;
-      }
-#line 1335 "parser.tab.c"
-    break;
-
-  case 12: /* S: IF LPAREN C RPAREN M LBRACE S_LIST RBRACE  */
-#line 280 "parser.y"
-      {
-          /*
-           * TRUE  -> beginning of IF body
-           * FALSE -> statement following the IF
-           */
-          backpatch((yyvsp[-5].expr).truelist, (yyvsp[-3].quad_num));
-
-          (yyval.stmt).nextlist =
-              merge((yyvsp[-5].expr).falselist, (yyvsp[-1].stmt).nextlist);
-      }
-#line 1350 "parser.tab.c"
-    break;
-
-  case 13: /* S: IF LPAREN C RPAREN M LBRACE S_LIST RBRACE ELSE N M LBRACE S_LIST RBRACE  */
-#line 298 "parser.y"
-      {
-          /*
-           * TRUE condition -> IF body
-           */
-          backpatch((yyvsp[-11].expr).truelist, (yyvsp[-9].quad_num));
-
-          /*
-           * FALSE condition -> ELSE body
-           */
-          backpatch((yyvsp[-11].expr).falselist, (yyvsp[-3].quad_num));
-
-          /*
-           * Combine:
-           *
-           * 1. Jumps leaving the IF body
-           * 2. Jumps created by N that skip ELSE
-           */
-          Node *temp =
-              merge((yyvsp[-7].stmt).nextlist, (yyvsp[-4].stmt).nextlist);
-
-          /*
-           * Then combine those with the ELSE body's
-           * unresolved nextlist.
-           */
-          (yyval.stmt).nextlist =
-              merge(temp, (yyvsp[-1].stmt).nextlist);
-      }
-#line 1382 "parser.tab.c"
-    break;
-
-  case 14: /* S: WHILE LPAREN M C RPAREN M LBRACE S_LIST RBRACE  */
-#line 330 "parser.y"
-      {          
-          backpatch((yyvsp[-5].expr).truelist, (yyvsp[-3].quad_num));
-          char loop_target[16];
-
-          sprintf(loop_target, "%d", (yyvsp[-6].quad_num));
-
-          emit("goto", "", "", loop_target);
-
-          /*
-           * Any unresolved jump inside the loop body
-           * continues to the condition.
-           */
-          backpatch((yyvsp[-1].stmt).nextlist, (yyvsp[-6].quad_num));
-
-          /*
-           * FALSE exits the loop.
-           */
-          (yyval.stmt).nextlist = (yyvsp[-5].expr).falselist;
-      }
-#line 1406 "parser.tab.c"
-    break;
-
-  case 15: /* $@1: %empty  */
-#line 354 "parser.y"
-      {
-          
-
-          char cond_target[16];
-
-          sprintf(cond_target, "%d", (yyvsp[-4].quad_num));
-
-          emit(
-              "goto",
-              "",
-              "",
-              cond_target
-          );
       }
 #line 1425 "parser.tab.c"
     break;
 
-  case 16: /* S: FOR LPAREN FOR_INIT SEMI M C SEMI M FOR_STEP $@1 RPAREN M LBRACE S_LIST RBRACE  */
-#line 369 "parser.y"
+  case 6: /* N: %empty  */
+#line 193 "parser.y"
       {
-          
-
-          backpatch(
-              (yyvsp[-9].expr).truelist,
-              (yyvsp[-3].quad_num)
-          );
-
-          
-          backpatch(
-              (yyvsp[-1].stmt).nextlist,
-              (yyvsp[-7].quad_num)
-          );
-
-          
-          char step_target[16];
-
-          sprintf(
-              step_target,
-              "%d",
-              (yyvsp[-7].quad_num)
-          );
-          emit(
-              "goto",
-              "",
-              "",
-              step_target
-          );
-          
-          (yyval.stmt).nextlist =
-              (yyvsp[-9].expr).falselist;
+          (yyval.stmt).nextlist = makelist(nextquad());
+          emit_loc("goto", "", "", "_", (yyloc).first_line, (yyloc).first_column);
       }
-#line 1462 "parser.tab.c"
+#line 1434 "parser.tab.c"
+    break;
+
+  case 7: /* FOR_INIT: ID ASSIGN E  */
+#line 201 "parser.y"
+      {
+          emit_loc("=", (yyvsp[0].str), "", (yyvsp[-2].str), (yylsp[-2]).first_line, (yylsp[-2]).first_column);
+      }
+#line 1442 "parser.tab.c"
+    break;
+
+  case 8: /* FOR_STEP: ID ASSIGN E  */
+#line 208 "parser.y"
+      {
+          emit_loc("=", (yyvsp[0].str), "", (yyvsp[-2].str), (yylsp[-2]).first_line, (yylsp[-2]).first_column);
+      }
+#line 1450 "parser.tab.c"
+    break;
+
+  case 9: /* S: ID ASSIGN E SEMI  */
+#line 215 "parser.y"
+      {
+          emit_loc("=", (yyvsp[-1].str), "", (yyvsp[-3].str), (yylsp[-3]).first_line, (yylsp[-3]).first_column);
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1459 "parser.tab.c"
+    break;
+
+  case 10: /* S: PRINT LPAREN E RPAREN SEMI  */
+#line 221 "parser.y"
+      {
+          emit_loc("print", (yyvsp[-2].str), "", "", (yylsp[-4]).first_line, (yylsp[-4]).first_column);
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1468 "parser.tab.c"
+    break;
+
+  case 11: /* S: PRINT LPAREN STRING_LITERAL RPAREN SEMI  */
+#line 227 "parser.y"
+      {
+          emit_loc("print_str", (yyvsp[-2].str), "", "", (yylsp[-4]).first_line, (yylsp[-4]).first_column);
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1477 "parser.tab.c"
+    break;
+
+  case 12: /* S: IF LPAREN C RPAREN M LBRACE S_LIST RBRACE  */
+#line 233 "parser.y"
+      {
+          backpatch((yyvsp[-5].expr).truelist, (yyvsp[-3].quad_num));
+          (yyval.stmt).nextlist = merge((yyvsp[-5].expr).falselist, (yyvsp[-1].stmt).nextlist);
+      }
+#line 1486 "parser.tab.c"
+    break;
+
+  case 13: /* S: IF LPAREN C RPAREN M LBRACE S_LIST RBRACE ELSE N M LBRACE S_LIST RBRACE  */
+#line 239 "parser.y"
+      {
+          backpatch((yyvsp[-11].expr).truelist, (yyvsp[-9].quad_num));
+          backpatch((yyvsp[-11].expr).falselist, (yyvsp[-3].quad_num));
+          Node *temp = merge((yyvsp[-7].stmt).nextlist, (yyvsp[-4].stmt).nextlist);
+          (yyval.stmt).nextlist = merge(temp, (yyvsp[-1].stmt).nextlist);
+      }
+#line 1497 "parser.tab.c"
+    break;
+
+  case 14: /* S: WHILE LPAREN M C RPAREN M LBRACE S_LIST RBRACE  */
+#line 247 "parser.y"
+      {          
+          backpatch((yyvsp[-5].expr).truelist, (yyvsp[-3].quad_num));
+          char loop_target[16];
+          sprintf(loop_target, "%d", (yyvsp[-6].quad_num));
+          emit_loc("goto", "", "", loop_target, (yylsp[-8]).first_line, (yylsp[-8]).first_column);
+          backpatch((yyvsp[-1].stmt).nextlist, (yyvsp[-6].quad_num));
+          (yyval.stmt).nextlist = (yyvsp[-5].expr).falselist;
+      }
+#line 1510 "parser.tab.c"
+    break;
+
+  case 15: /* $@1: %empty  */
+#line 257 "parser.y"
+      {
+          char cond_target[16];
+          sprintf(cond_target, "%d", (yyvsp[-4].quad_num));
+          emit_loc("goto", "", "", cond_target, (yylsp[-8]).first_line, (yylsp[-8]).first_column);
+      }
+#line 1520 "parser.tab.c"
+    break;
+
+  case 16: /* S: FOR LPAREN FOR_INIT SEMI M C SEMI M FOR_STEP $@1 RPAREN M LBRACE S_LIST RBRACE  */
+#line 263 "parser.y"
+      {
+          backpatch((yyvsp[-9].expr).truelist, (yyvsp[-3].quad_num));
+          backpatch((yyvsp[-1].stmt).nextlist, (yyvsp[-7].quad_num));
+          char step_target[16];
+          sprintf(step_target, "%d", (yyvsp[-7].quad_num));
+          emit_loc("goto", "", "", step_target, (yylsp[-14]).first_line, (yylsp[-14]).first_column);
+          (yyval.stmt).nextlist = (yyvsp[-9].expr).falselist;
+      }
+#line 1533 "parser.tab.c"
     break;
 
   case 17: /* S: LBRACE S_LIST RBRACE  */
-#line 407 "parser.y"
+#line 273 "parser.y"
       {
           (yyval.stmt).nextlist = (yyvsp[-1].stmt).nextlist;
       }
-#line 1470 "parser.tab.c"
+#line 1541 "parser.tab.c"
     break;
 
   case 18: /* C: LPAREN C RPAREN  */
-#line 436 "parser.y"
-    {
-        /* Pass the truth and falsity lists up directly */
-        (yyval.expr).truelist = (yyvsp[-1].expr).truelist;
-        (yyval.expr).falselist = (yyvsp[-1].expr).falselist;
-    }
-#line 1480 "parser.tab.c"
+#line 280 "parser.y"
+      {
+          (yyval.expr).truelist = (yyvsp[-1].expr).truelist;
+          (yyval.expr).falselist = (yyvsp[-1].expr).falselist;
+      }
+#line 1550 "parser.tab.c"
     break;
 
   case 19: /* C: E LT E  */
-#line 443 "parser.y"
+#line 286 "parser.y"
       {
-          (yyval.expr).truelist =
-              makelist(nextquad());
-
-          (yyval.expr).falselist =
-              makelist(nextquad() + 1);
-
-          emit(
-              "<",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              "_"
-          );
-
-          emit(
-              "goto",
-              "",
-              "",
-              "_"
-          );
+          (yyval.expr).truelist = makelist(nextquad());
+          (yyval.expr).falselist = makelist(nextquad() + 1);
+          emit_loc("<", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
+          emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1506 "parser.tab.c"
+#line 1561 "parser.tab.c"
     break;
 
   case 20: /* C: E GT E  */
-#line 467 "parser.y"
+#line 294 "parser.y"
       {
-          (yyval.expr).truelist =
-              makelist(nextquad());
-
-          (yyval.expr).falselist =
-              makelist(nextquad() + 1);
-
-          emit(
-              ">",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              "_"
-          );
-
-          emit(
-              "goto",
-              "",
-              "",
-              "_"
-          );
+          (yyval.expr).truelist = makelist(nextquad());
+          (yyval.expr).falselist = makelist(nextquad() + 1);
+          emit_loc(">", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
+          emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1532 "parser.tab.c"
+#line 1572 "parser.tab.c"
     break;
 
   case 21: /* C: E LE E  */
-#line 491 "parser.y"
+#line 302 "parser.y"
       {
-          (yyval.expr).truelist =
-              makelist(nextquad());
-
-          (yyval.expr).falselist =
-              makelist(nextquad() + 1);
-
-          emit(
-              "<=",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              "_"
-          );
-
-          emit(
-              "goto",
-              "",
-              "",
-              "_"
-          );
+          (yyval.expr).truelist = makelist(nextquad());
+          (yyval.expr).falselist = makelist(nextquad() + 1);
+          emit_loc("<=", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
+          emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1558 "parser.tab.c"
+#line 1583 "parser.tab.c"
     break;
 
   case 22: /* C: E GE E  */
-#line 515 "parser.y"
+#line 310 "parser.y"
       {
-          (yyval.expr).truelist =
-              makelist(nextquad());
-
-          (yyval.expr).falselist =
-              makelist(nextquad() + 1);
-
-          emit(
-              ">=",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              "_"
-          );
-
-          emit(
-              "goto",
-              "",
-              "",
-              "_"
-          );
+          (yyval.expr).truelist = makelist(nextquad());
+          (yyval.expr).falselist = makelist(nextquad() + 1);
+          emit_loc(">=", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
+          emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1584 "parser.tab.c"
+#line 1594 "parser.tab.c"
     break;
 
   case 23: /* C: E EQ E  */
-#line 539 "parser.y"
+#line 318 "parser.y"
       {
-          (yyval.expr).truelist =
-              makelist(nextquad());
-
-          (yyval.expr).falselist =
-              makelist(nextquad() + 1);
-
-          emit(
-              "==",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              "_"
-          );
-
-          emit(
-              "goto",
-              "",
-              "",
-              "_"
-          );
+          (yyval.expr).truelist = makelist(nextquad());
+          (yyval.expr).falselist = makelist(nextquad() + 1);
+          emit_loc("==", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
+          emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1610 "parser.tab.c"
+#line 1605 "parser.tab.c"
     break;
 
   case 24: /* C: E NE E  */
-#line 563 "parser.y"
+#line 326 "parser.y"
       {
-          (yyval.expr).truelist =
-              makelist(nextquad());
-
-          (yyval.expr).falselist =
-              makelist(nextquad() + 1);
-
-          emit(
-              "!=",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              "_"
-          );
-
-          emit(
-              "goto",
-              "",
-              "",
-              "_"
-          );
+          (yyval.expr).truelist = makelist(nextquad());
+          (yyval.expr).falselist = makelist(nextquad() + 1);
+          emit_loc("!=", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
+          emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1636 "parser.tab.c"
+#line 1616 "parser.tab.c"
     break;
 
   case 25: /* E: LPAREN E RPAREN  */
-#line 593 "parser.y"
-    {
-        /* Simply pass up the expression attributes */
-        (yyval.str) = (yyvsp[-1].str);
-    }
-#line 1645 "parser.tab.c"
+#line 336 "parser.y"
+      {
+          (yyval.str) = (yyvsp[-1].str);
+      }
+#line 1624 "parser.tab.c"
     break;
 
   case 26: /* E: E PLUS E  */
-#line 599 "parser.y"
+#line 341 "parser.y"
       {
           char *temp = newtemp();
-
-          emit(
-              "+",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              temp
-          );
-
+          emit_loc("+", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1662 "parser.tab.c"
+#line 1634 "parser.tab.c"
     break;
 
   case 27: /* E: E MINUS E  */
-#line 614 "parser.y"
+#line 348 "parser.y"
       {
           char *temp = newtemp();
-
-          emit(
-              "-",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              temp
-          );
-
+          emit_loc("-", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1679 "parser.tab.c"
+#line 1644 "parser.tab.c"
     break;
 
   case 28: /* E: E MULT E  */
-#line 629 "parser.y"
+#line 355 "parser.y"
       {
           char *temp = newtemp();
-
-          emit(
-              "*",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              temp
-          );
-
+          emit_loc("*", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1696 "parser.tab.c"
+#line 1654 "parser.tab.c"
     break;
 
   case 29: /* E: E DIV E  */
-#line 644 "parser.y"
+#line 362 "parser.y"
       {
           char *temp = newtemp();
-
-          emit(
-              "/",
-              (yyvsp[-2].str),
-              (yyvsp[0].str),
-              temp
-          );
-
+          emit_loc("/", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1713 "parser.tab.c"
+#line 1664 "parser.tab.c"
     break;
 
   case 30: /* E: ID  */
-#line 659 "parser.y"
+#line 369 "parser.y"
       {
           (yyval.str) = (yyvsp[0].str);
       }
-#line 1721 "parser.tab.c"
+#line 1672 "parser.tab.c"
     break;
 
   case 31: /* E: NUM  */
-#line 665 "parser.y"
+#line 374 "parser.y"
       {
           (yyval.str) = (yyvsp[0].str);
       }
-#line 1729 "parser.tab.c"
+#line 1680 "parser.tab.c"
     break;
 
 
-#line 1733 "parser.tab.c"
+#line 1684 "parser.tab.c"
 
       default: break;
     }
@@ -1750,6 +1701,7 @@ yyreduce:
   yylen = 0;
 
   *++yyvsp = yyval;
+  *++yylsp = yyloc;
 
   /* Now 'shift' the result of the reduction.  Determine what state
      that goes to, based on the state we popped back to and the rule
@@ -1779,6 +1731,7 @@ yyerrlab:
       yyerror (YY_("syntax error"));
     }
 
+  yyerror_range[1] = yylloc;
   if (yyerrstatus == 3)
     {
       /* If just tried and failed to reuse lookahead token after an
@@ -1793,7 +1746,7 @@ yyerrlab:
       else
         {
           yydestruct ("Error: discarding",
-                      yytoken, &yylval);
+                      yytoken, &yylval, &yylloc);
           yychar = YYEMPTY;
         }
     }
@@ -1847,9 +1800,9 @@ yyerrlab1:
       if (yyssp == yyss)
         YYABORT;
 
-
+      yyerror_range[1] = *yylsp;
       yydestruct ("Error: popping",
-                  YY_ACCESSING_SYMBOL (yystate), yyvsp);
+                  YY_ACCESSING_SYMBOL (yystate), yyvsp, yylsp);
       YYPOPSTACK (1);
       yystate = *yyssp;
       YY_STACK_PRINT (yyss, yyssp);
@@ -1859,6 +1812,9 @@ yyerrlab1:
   *++yyvsp = yylval;
   YY_IGNORE_MAYBE_UNINITIALIZED_END
 
+  yyerror_range[2] = yylloc;
+  ++yylsp;
+  YYLLOC_DEFAULT (*yylsp, yyerror_range, 2);
 
   /* Shift the error token.  */
   YY_SYMBOL_PRINT ("Shifting", YY_ACCESSING_SYMBOL (yyn), yyvsp, yylsp);
@@ -1902,7 +1858,7 @@ yyreturnlab:
          user semantic actions for why this is necessary.  */
       yytoken = YYTRANSLATE (yychar);
       yydestruct ("Cleanup: discarding lookahead",
-                  yytoken, &yylval);
+                  yytoken, &yylval, &yylloc);
     }
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYABORT or YYACCEPT.  */
@@ -1911,7 +1867,7 @@ yyreturnlab:
   while (yyssp != yyss)
     {
       yydestruct ("Cleanup: popping",
-                  YY_ACCESSING_SYMBOL (+*yyssp), yyvsp);
+                  YY_ACCESSING_SYMBOL (+*yyssp), yyvsp, yylsp);
       YYPOPSTACK (1);
     }
 #ifndef yyoverflow
@@ -1922,767 +1878,223 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 671 "parser.y"
+#line 379 "parser.y"
 
-
-
-/* =========================================================
-   NEXT QUAD
-   ========================================================= */
 
 int nextquad() {
     return quad_count;
 }
 
-
-/* =========================================================
-   EMIT
-   ========================================================= */
-
-void emit(
-    const char *op,
-    const char *arg1,
-    const char *arg2,
-    const char *result
-) {
-    if (quad_count >= 500) {
-        fprintf(
-            stderr,
-            "ERROR: Quadruple table overflow.\n"
-        );
-
+void emit_loc(const char *op, const char *arg1, const char *arg2, const char *result, int line, int col) {
+    if (quad_count >= MAX_QUADS) {
+        fprintf(stderr, "ERROR: Quadruple table overflow.\n");
         exit(EXIT_FAILURE);
     }
-
-    strcpy(
-        quad_table[quad_count].op,
-        op
-    );
-
-    strcpy(
-        quad_table[quad_count].arg1,
-        arg1
-    );
-
-    strcpy(
-        quad_table[quad_count].arg2,
-        arg2
-    );
-
-    strcpy(
-        quad_table[quad_count].result,
-        result
-    );
-
+    quad_table[quad_count].id = quad_count;
+    strncpy(quad_table[quad_count].op, op, 15);
+    strncpy(quad_table[quad_count].arg1, arg1, 31);
+    strncpy(quad_table[quad_count].arg2, arg2, 31);
+    strncpy(quad_table[quad_count].result, result, 31);
+    quad_table[quad_count].line = line > 0 ? line : current_line;
+    quad_table[quad_count].col = col > 0 ? col : 1;
     quad_count++;
 }
 
-
-/* =========================================================
-   TEMPORARY VARIABLE GENERATION
-   ========================================================= */
+void emit(const char *op, const char *arg1, const char *arg2, const char *result) {
+    emit_loc(op, arg1, arg2, result, current_line, current_col);
+}
 
 char* newtemp() {
-
-    char *temp =
-        (char*)malloc(16);
-
+    char *temp = (char*)malloc(16);
     if (temp == NULL) {
-        fprintf(
-            stderr,
-            "ERROR: Memory allocation failed.\n"
-        );
-
+        fprintf(stderr, "ERROR: Memory allocation failed.\n");
         exit(EXIT_FAILURE);
     }
-
-    sprintf(
-        temp,
-        "t%d",
-        temp_var_count++
-    );
-
+    sprintf(temp, "t%d", temp_var_count++);
     return temp;
 }
 
-
-/* =========================================================
-   CREATE BACKPATCH LIST
-   ========================================================= */
-
 Node* makelist(int index) {
-
-    Node *node =
-        (Node*)malloc(sizeof(Node));
-
+    Node *node = (Node*)malloc(sizeof(Node));
     if (node == NULL) {
-        fprintf(
-            stderr,
-            "ERROR: Memory allocation failed.\n"
-        );
-
+        fprintf(stderr, "ERROR: Memory allocation failed.\n");
         exit(EXIT_FAILURE);
     }
-
     node->quad_index = index;
-
     node->next = NULL;
 
+    if (bp_log_count < MAX_BP_LOGS) {
+        strncpy(bp_logs[bp_log_count].event_type, "makelist", 15);
+        bp_logs[bp_log_count].from_quad = index;
+        bp_logs[bp_log_count].target_quad = -1;
+        snprintf(bp_logs[bp_log_count].desc, sizeof(bp_logs[bp_log_count].desc), "makelist(%d)", index);
+        bp_log_count++;
+    }
     return node;
 }
 
-
-/* =========================================================
-   MERGE BACKPATCH LISTS
-   ========================================================= */
-
 Node* merge(Node *l1, Node *l2) {
-
-    if (!l1)
-        return l2;
-
-    if (!l2)
-        return l1;
+    if (!l1) return l2;
+    if (!l2) return l1;
 
     Node *curr = l1;
-
     while (curr->next)
         curr = curr->next;
-
     curr->next = l2;
 
+    if (bp_log_count < MAX_BP_LOGS) {
+        strncpy(bp_logs[bp_log_count].event_type, "merge", 15);
+        bp_logs[bp_log_count].from_quad = l1->quad_index;
+        bp_logs[bp_log_count].target_quad = l2->quad_index;
+        snprintf(bp_logs[bp_log_count].desc, sizeof(bp_logs[bp_log_count].desc), "merge lists starting at %d and %d", l1->quad_index, l2->quad_index);
+        bp_log_count++;
+    }
     return l1;
 }
 
-
-/* =========================================================
-   BACKPATCH
-   =========================================================
-
-   Instead of storing:
-
-       "goto 19"
-
-   inside a conditional quadruple,
-
-   we store only:
-
-       "19"
-
-   The TAC printer later converts this into:
-
-       goto L19
-
-   This keeps the internal representation clean.
-   ========================================================= */
-
-void backpatch(
-    Node *list,
-    int target_quad
-) {
-
+void backpatch(Node *list, int target_quad) {
     Node *curr = list;
-
     while (curr) {
-
         char target_str[16];
+        sprintf(target_str, "%d", target_quad);
 
-        sprintf(
-            target_str,
-            "%d",
-            target_quad
-        );
-
-        /*
-         * Display the actual backpatching operation.
-         * This is useful for Review 1 / viva.
-         */
-        if (bp_log_count < 200) {
+        if (bp_log_count < MAX_BP_LOGS) {
+            strncpy(bp_logs[bp_log_count].event_type, "backpatch", 15);
             bp_logs[bp_log_count].from_quad = curr->quad_index;
             bp_logs[bp_log_count].target_quad = target_quad;
+            snprintf(bp_logs[bp_log_count].desc, sizeof(bp_logs[bp_log_count].desc), "backpatch quad %d -> target L%d", curr->quad_index, target_quad);
             bp_log_count++;
         }
 
-        strcpy(
-            quad_table[curr->quad_index].result,
-            target_str
-        );
-
+        if (curr->quad_index >= 0 && curr->quad_index < quad_count) {
+            strncpy(quad_table[curr->quad_index].result, target_str, 31);
+        }
         curr = curr->next;
     }
 }
-/* =========================================================
-   PRINT BACKPATCH LOGS
-   ========================================================= */
 
 void print_backpatch_logs() {
-    printf(
-        "\n--- BACKPATCHING OPERATIONS ---\n"
-    );
-
+    printf("\n--- BACKPATCHING OPERATIONS ---\n");
     if (bp_log_count == 0) {
         printf("No backpatching operations recorded.\n");
         return;
     }
-
     for (int i = 0; i < bp_log_count; i++) {
-        printf(
-            "BACKPATCH: Quad %d -> Quad %d\n",
-            bp_logs[i].from_quad,
-            bp_logs[i].target_quad
-        );
+        if (strcmp(bp_logs[i].event_type, "backpatch") == 0) {
+            printf("BACKPATCH: Quad %d -> Quad %d\n", bp_logs[i].from_quad, bp_logs[i].target_quad);
+        }
     }
 }
-
-/* =========================================================
-   HUMAN-READABLE THREE-ADDRESS CODE
-   ========================================================= */
 
 void print_tac() {
-
-    printf(
-        "\n--- THREE-ADDRESS CODE (TAC) ---\n"
-    );
-
-    printf(
-        "----------------------------------------\n"
-    );
-
+    printf("\n--- THREE-ADDRESS CODE (TAC) ---\n");
+    printf("----------------------------------------\n");
     for (int i = 0; i < quad_count; i++) {
-
-        Quad *q =
-            &quad_table[i];
-
-        /*
-         * Label for every instruction.
-         *
-         * This makes control-flow translation easy
-         * to demonstrate during the review.
-         */
-        printf(
-            "L%d:\n",
-            i
-        );
-
-
-        /* Assignment */
-
+        Quad *q = &quad_table[i];
+        printf("L%d:\n", i);
         if (strcmp(q->op, "=") == 0) {
-
-            printf(
-                "    %s = %s\n",
-                q->result,
-                q->arg1
-            );
-        }
-
-
-        /* Print */
-
-        else if (
-            strcmp(q->op, "print") == 0
-        ) {
-
-            printf(
-                "    print %s\n",
-                q->arg1
-            );
-        }
-
-
-        /* Unconditional jump */
-
-        else if (
-            strcmp(q->op, "goto") == 0
-        ) {
-
-            printf(
-                "    goto L%s\n",
-                q->result
-            );
-        }
-
-
-        /* Conditional jump */
-
-        else if (
-            strcmp(q->op, "<") == 0 ||
-            strcmp(q->op, ">") == 0 ||
-            strcmp(q->op, "<=") == 0 ||
-            strcmp(q->op, ">=") == 0 ||
-            strcmp(q->op, "==") == 0 ||
-            strcmp(q->op, "!=") == 0
-        ) {
-
-            printf(
-                "    if %s %s %s goto L%s\n",
-                q->arg1,
-                q->op,
-                q->arg2,
-                q->result
-            );
-        }
-
-
-        /* Arithmetic */
-
-        else {
-
-            printf(
-                "    %s = %s %s %s\n",
-                q->result,
-                q->arg1,
-                q->op,
-                q->arg2
-            );
+            printf("    %s = %s\n", q->result, q->arg1);
+        } else if (strcmp(q->op, "print") == 0) {
+            printf("    print %s\n", q->arg1);
+        } else if (strcmp(q->op, "print_str") == 0) {
+            printf("    print %s\n", q->arg1);
+        } else if (strcmp(q->op, "goto") == 0) {
+            printf("    goto L%s\n", q->result);
+        } else if (strcmp(q->op, "<") == 0 || strcmp(q->op, ">") == 0 ||
+                   strcmp(q->op, "<=") == 0 || strcmp(q->op, ">=") == 0 ||
+                   strcmp(q->op, "==") == 0 || strcmp(q->op, "!=") == 0) {
+            printf("    if %s %s %s goto L%s\n", q->arg1, q->op, q->arg2, q->result);
+        } else {
+            printf("    %s = %s %s %s\n", q->result, q->arg1, q->op, q->arg2);
         }
     }
-
-
-    /*
-     * If a conditional jump exits the program,
-     * quad_count itself is a valid destination.
-     */
-    printf(
-        "L%d:\n",
-        quad_count
-    );
+    printf("L%d:\n", quad_count);
 }
-
-
-/* =========================================================
-   QUADRUPLE TABLE
-   ========================================================= */
 
 void print_quads() {
-
-    printf(
-        "\n--- QUADRUPLE TABLE ---\n"
-    );
-
-    printf(
-        "%-8s %-8s %-8s %-8s %-12s\n",
-        "Quad #",
-        "Op",
-        "Arg1",
-        "Arg2",
-        "Result"
-    );
-
-    printf(
-        "--------------------------------------------------\n"
-    );
-
+    printf("\n--- QUADRUPLE TABLE ---\n");
+    printf("%-8s %-8s %-8s %-8s %-12s\n", "Quad #", "Op", "Arg1", "Arg2", "Result");
+    printf("--------------------------------------------------\n");
     for (int i = 0; i < quad_count; i++) {
-
-        printf(
-            "%-8d %-8s %-8s %-8s %-12s\n",
-            i,
-            quad_table[i].op,
-            quad_table[i].arg1,
-            quad_table[i].arg2,
-            quad_table[i].result
-        );
+        printf("%-8d %-8s %-8s %-8s %-12s\n",
+            i, quad_table[i].op, quad_table[i].arg1, quad_table[i].arg2, quad_table[i].result);
     }
 }
 
-
-/* =========================================================
-   SIMPLE TAC EXECUTION SIMULATOR
-   ========================================================= */
-
 typedef struct {
-
     char name[32];
-
     int val;
-
 } Variable;
 
-
-Variable symbol_table[100];
-
+Variable symbol_table[500];
 int sym_count = 0;
 
-
-/* =========================================================
-   GET VARIABLE VALUE
-   ========================================================= */
-
-int get_var(
-    const char *name
-) {
-
-    /*
-     * Numeric constant
-     */
-    if (
-        (name[0] >= '0' && name[0] <= '9') ||
-        (
-            name[0] == '-' &&
-            name[1] >= '0' &&
-            name[1] <= '9'
-        )
-    ) {
-
+int get_var(const char *name) {
+    if ((name[0] >= '0' && name[0] <= '9') ||
+        (name[0] == '-' && name[1] >= '0' && name[1] <= '9')) {
         return atoi(name);
     }
-
-
-    /*
-     * Search symbol table
-     */
-    for (
-        int i = 0;
-        i < sym_count;
-        i++
-    ) {
-
-        if (
-            strcmp(
-                symbol_table[i].name,
-                name
-            ) == 0
-        ) {
-
+    for (int i = 0; i < sym_count; i++) {
+        if (strcmp(symbol_table[i].name, name) == 0) {
             return symbol_table[i].val;
         }
     }
-
-
-    /*
-     * Undefined variables currently
-     * default to zero.
-     */
     return 0;
 }
 
-
-/* =========================================================
-   SET VARIABLE VALUE
-   ========================================================= */
-
-void set_var(
-    const char *name,
-    int val
-) {
-
-    /*
-     * Existing variable
-     */
-    for (
-        int i = 0;
-        i < sym_count;
-        i++
-    ) {
-
-        if (
-            strcmp(
-                symbol_table[i].name,
-                name
-            ) == 0
-        ) {
-
+void set_var(const char *name, int val) {
+    for (int i = 0; i < sym_count; i++) {
+        if (strcmp(symbol_table[i].name, name) == 0) {
             symbol_table[i].val = val;
-
             return;
         }
     }
-
-
-    /*
-     * New variable
-     */
-    if (sym_count >= 100) {
-
-        fprintf(
-            stderr,
-            "ERROR: Symbol table overflow.\n"
-        );
-
-        exit(EXIT_FAILURE);
+    if (sym_count < 500) {
+        strncpy(symbol_table[sym_count].name, name, 31);
+        symbol_table[sym_count].val = val;
+        sym_count++;
     }
-
-
-    strcpy(
-        symbol_table[sym_count].name,
-        name
-    );
-
-    symbol_table[sym_count].val = val;
-
-    sym_count++;
 }
 
-
-/* =========================================================
-   TAC EXECUTION
-   ========================================================= */
-
 void execute_tac() {
-
-    printf(
-        "\n--- RUNTIME EXECUTION OUTPUT ---\n"
-    );
-
-
+    printf("\n--- RUNTIME EXECUTION OUTPUT ---\n");
     int pc = 0;
-
     int steps = 0;
-
-
-    /*
-     * Step limit prevents accidental infinite loops
-     * during compiler development.
-     */
-    while (
-        pc < quad_count &&
-        steps < 1000
-    ) {
-
+    while (pc < quad_count && steps < 1000) {
         steps++;
+        Quad q = quad_table[pc];
+        int next_pc = pc + 1;
 
-
-        Quad q =
-            quad_table[pc];
-
-
-        /*
-         * Default control flow:
-         *
-         * execute next quad.
-         */
-        int next_pc =
-            pc + 1;
-
-
-        /* -------------------------------------------------
-           ASSIGNMENT
-           ------------------------------------------------- */
-
-        if (
-            strcmp(q.op, "=") == 0
-        ) {
-
-            set_var(
-                q.result,
-                get_var(q.arg1)
-            );
-        }
-
-
-        /* -------------------------------------------------
-           ADDITION
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "+") == 0
-        ) {
-
-            set_var(
-                q.result,
-                get_var(q.arg1) +
-                get_var(q.arg2)
-            );
-        }
-
-
-        /* -------------------------------------------------
-           SUBTRACTION
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "-") == 0
-        ) {
-
-            set_var(
-                q.result,
-                get_var(q.arg1) -
-                get_var(q.arg2)
-            );
-        }
-
-
-        /* -------------------------------------------------
-           MULTIPLICATION
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "*") == 0
-        ) {
-
-            set_var(
-                q.result,
-                get_var(q.arg1) *
-                get_var(q.arg2)
-            );
-        }
-
-
-        /* -------------------------------------------------
-           DIVISION
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "/") == 0
-        ) {
-
-            int denom =
-                get_var(q.arg2);
-
+        if (strcmp(q.op, "=") == 0) {
+            set_var(q.result, get_var(q.arg1));
+        } else if (strcmp(q.op, "+") == 0) {
+            set_var(q.result, get_var(q.arg1) + get_var(q.arg2));
+        } else if (strcmp(q.op, "-") == 0) {
+            set_var(q.result, get_var(q.arg1) - get_var(q.arg2));
+        } else if (strcmp(q.op, "*") == 0) {
+            set_var(q.result, get_var(q.arg1) * get_var(q.arg2));
+        } else if (strcmp(q.op, "/") == 0) {
+            int denom = get_var(q.arg2);
             if (denom != 0) {
-
-                set_var(
-                    q.result,
-                    get_var(q.arg1) /
-                    denom
-                );
+                set_var(q.result, get_var(q.arg1) / denom);
             }
-        }
-
-
-        /* -------------------------------------------------
-           LESS THAN
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "<") == 0
-        ) {
-
-            if (
-                get_var(q.arg1) <
-                get_var(q.arg2)
-            ) {
-
-                next_pc =
-                    atoi(q.result);
-            }
-        }
-
-
-        /* -------------------------------------------------
-           GREATER THAN
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, ">") == 0
-        ) {
-
-            if (
-                get_var(q.arg1) >
-                get_var(q.arg2)
-            ) {
-
-                next_pc =
-                    atoi(q.result);
-            }
-        }
-
-
-        /* -------------------------------------------------
-           LESS THAN OR EQUAL
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "<=") == 0
-        ) {
-
-            if (
-                get_var(q.arg1) <=
-                get_var(q.arg2)
-            ) {
-
-                next_pc =
-                    atoi(q.result);
-            }
-        }
-
-
-        /* -------------------------------------------------
-           GREATER THAN OR EQUAL
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, ">=") == 0
-        ) {
-
-            if (
-                get_var(q.arg1) >=
-                get_var(q.arg2)
-            ) {
-
-                next_pc =
-                    atoi(q.result);
-            }
-        }
-
-
-        /* -------------------------------------------------
-           EQUAL
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "==") == 0
-        ) {
-
-            if (
-                get_var(q.arg1) ==
-                get_var(q.arg2)
-            ) {
-
-                next_pc =
-                    atoi(q.result);
-            }
-        }
-
-
-        /* -------------------------------------------------
-           NOT EQUAL
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "!=") == 0
-        ) {
-
-            if (
-                get_var(q.arg1) !=
-                get_var(q.arg2)
-            ) {
-
-                next_pc =
-                    atoi(q.result);
-            }
-        }
-
-
-        /* -------------------------------------------------
-           UNCONDITIONAL GOTO
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "goto") == 0
-        ) {
-
-            next_pc =
-                atoi(q.result);
-        }
-
-
-        /* -------------------------------------------------
-           PRINT
-           ------------------------------------------------- */
-
-        else if (
-            strcmp(q.op, "print") == 0
-        ) {
-
-            printf(
-                "OUTPUT: %d\n",
-                get_var(q.arg1)
-            );
-        }
-
-        else if (strcmp(q.op, "print_str") == 0) {
+        } else if (strcmp(q.op, "<") == 0) {
+            if (get_var(q.arg1) < get_var(q.arg2)) next_pc = atoi(q.result);
+        } else if (strcmp(q.op, ">") == 0) {
+            if (get_var(q.arg1) > get_var(q.arg2)) next_pc = atoi(q.result);
+        } else if (strcmp(q.op, "<=") == 0) {
+            if (get_var(q.arg1) <= get_var(q.arg2)) next_pc = atoi(q.result);
+        } else if (strcmp(q.op, ">=") == 0) {
+            if (get_var(q.arg1) >= get_var(q.arg2)) next_pc = atoi(q.result);
+        } else if (strcmp(q.op, "==") == 0) {
+            if (get_var(q.arg1) == get_var(q.arg2)) next_pc = atoi(q.result);
+        } else if (strcmp(q.op, "!=") == 0) {
+            if (get_var(q.arg1) != get_var(q.arg2)) next_pc = atoi(q.result);
+        } else if (strcmp(q.op, "goto") == 0) {
+            next_pc = atoi(q.result);
+        } else if (strcmp(q.op, "print") == 0) {
+            printf("OUTPUT: %d\n", get_var(q.arg1));
+        } else if (strcmp(q.op, "print_str") == 0) {
             int len = strlen(q.arg1);
             if (len >= 2 && q.arg1[0] == '"' && q.arg1[len - 1] == '"') {
                 printf("OUTPUT: %.*s\n", len - 2, q.arg1 + 1);
@@ -2690,120 +2102,147 @@ void execute_tac() {
                 printf("OUTPUT: %s\n", q.arg1);
             }
         }
-
-
-        /*
-         * Move to next program counter.
-         */
-        pc =
-            next_pc;
+        pc = next_pc;
     }
-
-
-    /* -----------------------------------------------------
-       LOOP SAFETY WARNING
-       ----------------------------------------------------- */
 
     if (steps >= 1000) {
-
-        printf(
-            "\nWARNING: Execution stopped after "
-            "1000 TAC steps.\n"
-        );
-
-        printf(
-            "Possible infinite loop detected.\n"
-        );
+        printf("\nWARNING: Execution stopped after 1000 TAC steps.\nPossible infinite loop detected.\n");
     }
 
-
-    /* -----------------------------------------------------
-       FINAL MEMORY STATE
-       ----------------------------------------------------- */
-
-    printf(
-        "\nFinal Memory State (Variables):\n"
-    );
-
-    for (
-        int i = 0;
-        i < sym_count;
-        i++
-    ) {
-
-        /*
-         * Hide compiler-generated temporaries.
-         */
-        if (
-            symbol_table[i].name[0] != 't'
-        ) {
-
-            printf(
-                "  %s = %d\n",
-                symbol_table[i].name,
-                symbol_table[i].val
-            );
+    printf("\nFinal Memory State (Variables):\n");
+    for (int i = 0; i < sym_count; i++) {
+        if (symbol_table[i].name[0] != 't') {
+            printf("  %s = %d\n", symbol_table[i].name, symbol_table[i].val);
         }
     }
 }
 
-
 /* =========================================================
-   ERROR HANDLER
+   ESCAPE HELPER FOR JSON
    ========================================================= */
 
-void yyerror(
-    const char *s
-) {
-
-    fprintf(
-        stderr,
-        "COMPILATION ERROR: %s\n",
-        s
-    );
+void print_json_escaped(const char *s) {
+    if (!s) return;
+    putchar('"');
+    for (; *s; s++) {
+        switch (*s) {
+            case '\\': fputs("\\\\", stdout); break;
+            case '"':  fputs("\\\"", stdout); break;
+            case '\b': fputs("\\b", stdout); break;
+            case '\f': fputs("\\f", stdout); break;
+            case '\n': fputs("\\n", stdout); break;
+            case '\r': fputs("\\r", stdout); break;
+            case '\t': fputs("\\t", stdout); break;
+            default:
+                if ((unsigned char)*s < ' ') {
+                    printf("\\u%04x", (unsigned char)*s);
+                } else {
+                    putchar(*s);
+                }
+                break;
+        }
+    }
+    putchar('"');
 }
 
-
 /* =========================================================
-   MAIN
+   STRUCTURED JSON OUTPUT
    ========================================================= */
 
-int main() {
+void output_json() {
+    printf("{\n");
+    printf("  \"success\": %s,\n", compilation_failed ? "false" : "true");
+    printf("  \"quad_count\": %d,\n", quad_count);
 
-    /*
-     * yyparse() reads source code from stdin.
-     *
-     * Therefore both of these work:
-     *
-     *     ./compiler
-     *
-     * or:
-     *
-     *     ./compiler < input.txt
-     */
+    /* Diagnostics */
+    printf("  \"diagnostics\": [\n");
+    for (int i = 0; i < diag_count; i++) {
+        printf("    { \"severity\": ");
+        print_json_escaped(diagnostics[i].severity);
+        printf(", \"message\": ");
+        print_json_escaped(diagnostics[i].message);
+        printf(", \"line\": %d, \"col\": %d }", diagnostics[i].line, diagnostics[i].col);
+        if (i < diag_count - 1) printf(",");
+        printf("\n");
+    }
+    printf("  ],\n");
 
-    if (yyparse() == 0) {
-        
-        /*
-         * Print backpatch log summary after input stream finishes
-         */
-        print_backpatch_logs();
-        
-        /*
-         * Human-readable TAC
-         */
-        print_tac();
+    /* Tokens */
+    printf("  \"tokens\": [\n");
+    for (int i = 0; i < token_count; i++) {
+        printf("    { \"index\": %d, \"type\": ", i);
+        print_json_escaped(token_records[i].type);
+        printf(", \"lexeme\": ");
+        print_json_escaped(token_records[i].lexeme);
+        printf(", \"line\": %d, \"col\": %d }", token_records[i].line, token_records[i].col);
+        if (i < token_count - 1) printf(",");
+        printf("\n");
+    }
+    printf("  ],\n");
 
-        /*
-         * Internal quadruple representation
-         */
-        print_quads();
+    /* Quadruples */
+    printf("  \"quads\": [\n");
+    for (int i = 0; i < quad_count; i++) {
+        Quad *q = &quad_table[i];
+        printf("    { \"id\": %d, \"op\": ", q->id);
+        print_json_escaped(q->op);
+        printf(", \"arg1\": ");
+        print_json_escaped(q->arg1);
+        printf(", \"arg2\": ");
+        print_json_escaped(q->arg2);
+        printf(", \"result\": ");
+        print_json_escaped(q->result);
+        printf(", \"line\": %d, \"col\": %d }", q->line, q->col);
+        if (i < quad_count - 1) printf(",");
+        printf("\n");
+    }
+    printf("  ],\n");
 
-        /*
-         * Execute generated intermediate code
-         */
-        execute_tac();
+    /* Backpatch Events */
+    printf("  \"backpatch_logs\": [\n");
+    for (int i = 0; i < bp_log_count; i++) {
+        printf("    { \"event\": ");
+        print_json_escaped(bp_logs[i].event_type);
+        printf(", \"from_quad\": %d, \"target_quad\": %d, \"desc\": ", bp_logs[i].from_quad, bp_logs[i].target_quad);
+        print_json_escaped(bp_logs[i].desc);
+        printf(" }");
+        if (i < bp_log_count - 1) printf(",");
+        printf("\n");
+    }
+    printf("  ]\n");
+
+    printf("}\n");
+}
+
+void yyerror(const char *s) {
+    add_diagnostic("error", s, current_line, current_col);
+    if (!json_output_mode) {
+        fprintf(stderr, "COMPILATION ERROR: %s at line %d, col %d\n", s, current_line, current_col);
+    }
+}
+
+int main(int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--json") == 0) {
+            json_output_mode = 1;
+        }
     }
 
-    return 0;
+    int parse_res = yyparse();
+    if (parse_res != 0) {
+        compilation_failed = 1;
+    }
+
+    if (json_output_mode) {
+        output_json();
+    } else {
+        if (!compilation_failed) {
+            print_backpatch_logs();
+            print_tac();
+            print_quads();
+            execute_tac();
+        }
+    }
+
+    return compilation_failed ? 1 : 0;
 }

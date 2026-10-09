@@ -110,7 +110,7 @@ export const RegisterStudio: React.FC<Props> = ({ analysis, quadCount }) => {
                 }}
               >
                 <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{e.source}</span>
-                <span style={{ color: 'var(--accent-amber)' }}>⚡ interferes with</span>
+                <span style={{ color: 'var(--accent-amber)' }}> interferes with</span>
                 <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{e.target}</span>
               </div>
             ))}

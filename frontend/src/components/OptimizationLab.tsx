@@ -40,33 +40,34 @@ export const OptimizationLab: React.FC<Props> = ({
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-primary)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-primary)', overflow: 'hidden' }}>
       {/* Header Controls */}
       <div
         style={{
-          padding: '12px 16px',
+          padding: '12px 18px',
           borderBottom: '1px solid var(--border-color)',
           background: 'var(--bg-secondary)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Sparkles size={18} style={{ color: 'var(--accent-amber)' }} />
-          <span style={{ fontWeight: 600, fontSize: '14px' }}>Deterministic Optimization Pipeline</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Sparkles size={20} style={{ color: 'var(--accent-amber)' }} />
+          <span style={{ fontWeight: 600, fontSize: '15px' }}>Deterministic Optimization Pipeline</span>
         </div>
         <button
           className="btn btn-primary"
           onClick={handleRun}
           disabled={isLoading || quads.length === 0}
         >
-          {isLoading ? <RefreshCw size={14} className="spin" /> : <Zap size={14} />}
+          {isLoading ? <RefreshCw size={15} className="spin" /> : <Zap size={15} />}
           Apply Selected Passes
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 320px) 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Pass Configuration Panel */}
         <div
           style={{
@@ -74,12 +75,13 @@ export const OptimizationLab: React.FC<Props> = ({
             background: 'var(--bg-secondary)',
             padding: '16px',
             overflowY: 'auto',
+            minHeight: 0,
           }}
         >
-          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 14 }}>
             CONFIGURABLE PASSES
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {passes.map((p) => {
               const isChecked = enabledPasses.includes(p.key);
               return (
@@ -87,25 +89,25 @@ export const OptimizationLab: React.FC<Props> = ({
                   key={p.key}
                   onClick={() => togglePass(p.key)}
                   style={{
-                    padding: '10px 12px',
+                    padding: '12px 14px',
                     borderRadius: 'var(--radius-sm)',
                     background: isChecked ? 'var(--bg-tertiary)' : 'transparent',
                     border: isChecked ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
                     cursor: 'pointer',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                     <input
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => {}}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', width: 16, height: 16 }}
                     />
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {p.name}
                     </span>
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.45, paddingLeft: 26 }}>
                     {p.desc}
                   </div>
                 </div>
@@ -114,22 +116,22 @@ export const OptimizationLab: React.FC<Props> = ({
           </div>
 
           {optResult && (
-            <div style={{ marginTop: 24, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            <div style={{ marginTop: 24, padding: '14px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
                 TRANSFORMATION METRICS
               </div>
-              <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Original Quads:</span>
-                  <span style={{ fontWeight: 600 }}>{optResult.stats.original_count}</span>
+                  <span style={{ fontWeight: 700 }}>{optResult.stats.original_count}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Optimized Quads:</span>
-                  <span style={{ fontWeight: 600, color: 'var(--accent-green)' }}>{optResult.stats.optimized_count}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--accent-green)' }}>{optResult.stats.optimized_count}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Transformations:</span>
-                  <span style={{ fontWeight: 600, color: 'var(--accent-amber)' }}>{optResult.stats.transformations}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--accent-amber)' }}>{optResult.stats.transformations}</span>
                 </div>
               </div>
             </div>
@@ -137,20 +139,20 @@ export const OptimizationLab: React.FC<Props> = ({
         </div>
 
         {/* Side-by-Side Comparison & Transformation Logs */}
-        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           {optResult ? (
-            <div style={{ flex: 1, display: 'grid', gridTemplateRows: '1fr 180px', overflow: 'hidden' }}>
+            <div style={{ flex: 1, display: 'grid', gridTemplateRows: '1fr 200px', minHeight: 0, overflow: 'hidden' }}>
               {/* Side-by-Side TAC View */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--border-color)', overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--border-color)', minHeight: 0, overflowY: 'auto' }}>
                 {/* Original */}
-                <div style={{ padding: '12px', borderRight: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                <div style={{ padding: '14px', borderRight: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
                     ORIGINAL THREE-ADDRESS CODE
                   </div>
-                  <div className="mono" style={{ fontSize: '12px', lineHeight: 1.6 }}>
+                  <div className="mono" style={{ fontSize: '13px', lineHeight: 1.7 }}>
                     {optResult.original_quads.map((q) => (
                       <div key={q.id} style={{ color: 'var(--text-primary)', padding: '2px 0' }}>
-                        <span style={{ color: 'var(--accent-cyan)' }}>L{q.id}:</span>{' '}
+                        <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>L{q.id}:</span>{' '}
                         {q.op === '=' ? `${q.result} = ${q.arg1}` : `${q.result} = ${q.arg1} ${q.op} ${q.arg2}`}
                       </div>
                     ))}
@@ -158,14 +160,14 @@ export const OptimizationLab: React.FC<Props> = ({
                 </div>
 
                 {/* Optimized */}
-                <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.03)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-green)', marginBottom: 8 }}>
+                <div style={{ padding: '14px', background: 'rgba(16, 185, 129, 0.03)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-green)', marginBottom: 10 }}>
                     OPTIMIZED THREE-ADDRESS CODE
                   </div>
-                  <div className="mono" style={{ fontSize: '12px', lineHeight: 1.6 }}>
+                  <div className="mono" style={{ fontSize: '13px', lineHeight: 1.7 }}>
                     {optResult.optimized_tac.map((inst) => (
                       <div key={inst.id} style={{ color: 'var(--text-primary)', padding: '2px 0' }}>
-                        <span style={{ color: 'var(--accent-cyan)' }}>{inst.label}:</span> {inst.text}
+                        <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{inst.label}:</span> {inst.text}
                       </div>
                     ))}
                   </div>
@@ -173,33 +175,33 @@ export const OptimizationLab: React.FC<Props> = ({
               </div>
 
               {/* Transformation Log */}
-              <div style={{ padding: '12px', overflowY: 'auto', background: 'var(--bg-secondary)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              <div style={{ padding: '14px', overflowY: 'auto', background: 'var(--bg-secondary)', minHeight: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
                   TRANSFORMATION AUDIT LOG ({optResult.logs.length} actions)
                 </div>
                 {optResult.logs.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                     No transformation candidates found in current program.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {optResult.logs.map((log, i) => (
                       <div
                         key={i}
                         style={{
-                          fontSize: '12px',
+                          fontSize: '13px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 10,
-                          padding: '6px 8px',
+                          gap: 12,
+                          padding: '7px 10px',
                           background: 'var(--bg-tertiary)',
                           borderRadius: 'var(--radius-sm)',
                         }}
                       >
-                        <CheckCircle2 size={14} style={{ color: 'var(--accent-green)' }} />
+                        <CheckCircle2 size={16} style={{ color: 'var(--accent-green)' }} />
                         <span className="badge badge-amber">{log.pass}</span>
                         <span style={{ color: 'var(--text-primary)' }}>{log.desc}</span>
-                        <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: '11px' }}>
+                        <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: '12px' }}>
                           inst #{log.instruction_id}
                         </span>
                       </div>
@@ -209,7 +211,7 @@ export const OptimizationLab: React.FC<Props> = ({
               </div>
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
               Click "Apply Selected Passes" to inspect optimized code and transformation logs.
             </div>
           )}

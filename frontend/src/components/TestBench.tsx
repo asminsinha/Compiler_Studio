@@ -34,35 +34,35 @@ export const TestBench: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-primary)', padding: '16px', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-primary)', padding: '20px', overflowY: 'auto' }}>
       {/* Test Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
             Compiler Test Bench & Automated Verification Suite
           </h2>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 4 }}>
             Regression tests, loop control-flow verifications, backpatching correctness, and diagnostics
           </div>
         </div>
         <button className="btn btn-primary" onClick={runAllTests} disabled={isRunning}>
-          <Play size={14} /> {isRunning ? 'Running Suite...' : 'Execute All Tests'}
+          <Play size={15} fill="currentColor" /> {isRunning ? 'Running Suite...' : 'Execute All Tests'}
         </button>
       </div>
 
       {report && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
-          <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>TOTAL TESTS</div>
-            <div style={{ fontSize: '20px', fontWeight: 700 }}>{report.total}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL TESTS</div>
+            <div style={{ fontSize: '24px', fontWeight: 700, marginTop: 4 }}>{report.total}</div>
           </div>
-          <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>PASSED</div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-green)' }}>{report.passed}</div>
+          <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>PASSED</div>
+            <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--accent-green)', marginTop: 4 }}>{report.passed}</div>
           </div>
-          <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>FAILED</div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: report.failed > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>FAILED</div>
+            <div style={{ fontSize: '24px', fontWeight: 700, color: report.failed > 0 ? 'var(--accent-red)' : 'var(--accent-green)', marginTop: 4 }}>
               {report.failed}
             </div>
           </div>
@@ -71,44 +71,44 @@ export const TestBench: React.FC = () => {
 
       {/* Test Results Table */}
       <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--bg-tertiary)', color: 'var(--text-muted)', textAlign: 'left' }}>
-              <th style={{ padding: '8px 12px' }}>Test ID</th>
-              <th style={{ padding: '8px 12px' }}>Suite & Description</th>
-              <th style={{ padding: '8px 12px' }}>Result</th>
-              <th style={{ padding: '8px 12px' }}>Duration</th>
-              <th style={{ padding: '8px 12px' }}>Verification Notes</th>
+              <th style={{ padding: '10px 14px' }}>Test ID</th>
+              <th style={{ padding: '10px 14px' }}>Suite & Description</th>
+              <th style={{ padding: '10px 14px' }}>Result</th>
+              <th style={{ padding: '10px 14px' }}>Duration</th>
+              <th style={{ padding: '10px 14px' }}>Verification Notes</th>
             </tr>
           </thead>
           <tbody>
             {report ? (
               report.results.map((t) => (
                 <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--accent-cyan)' }} className="mono">
+                  <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--accent-cyan)' }} className="mono">
                     {t.id}
                   </td>
-                  <td style={{ padding: '8px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>{t.name}</td>
-                  <td style={{ padding: '8px 12px' }}>
+                  <td style={{ padding: '10px 14px', color: 'var(--text-primary)', fontWeight: 500 }}>{t.name}</td>
+                  <td style={{ padding: '10px 14px' }}>
                     {t.status === 'PASS' ? (
-                      <span className="badge badge-green" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <CheckCircle2 size={12} /> PASS
+                      <span className="badge badge-green" style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+                        <CheckCircle2 size={13} /> PASS
                       </span>
                     ) : (
-                      <span className="badge badge-red" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <XCircle size={12} /> FAIL
+                      <span className="badge badge-red" style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+                        <XCircle size={13} /> FAIL
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }} className="mono">
+                  <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }} className="mono">
                     {t.duration_ms}ms
                   </td>
-                  <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{t.message}</td>
+                  <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{t.message}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13.5px' }}>
                   Click "Execute All Tests" to run regression checks against the native Flex/Bison compiler.
                 </td>
               </tr>

@@ -62,22 +62,27 @@ extern int yydebug;
     IF = 263,                      /* IF  */
     ELSE = 264,                    /* ELSE  */
     PRINT = 265,                   /* PRINT  */
-    LE = 266,                      /* LE  */
-    GE = 267,                      /* GE  */
-    EQ = 268,                      /* EQ  */
-    NE = 269,                      /* NE  */
-    LT = 270,                      /* LT  */
-    GT = 271,                      /* GT  */
-    ASSIGN = 272,                  /* ASSIGN  */
-    PLUS = 273,                    /* PLUS  */
-    MINUS = 274,                   /* MINUS  */
-    MULT = 275,                    /* MULT  */
-    DIV = 276,                     /* DIV  */
-    SEMI = 277,                    /* SEMI  */
-    LPAREN = 278,                  /* LPAREN  */
-    RPAREN = 279,                  /* RPAREN  */
-    LBRACE = 280,                  /* LBRACE  */
-    RBRACE = 281                   /* RBRACE  */
+    SWITCH = 266,                  /* SWITCH  */
+    CASE = 267,                    /* CASE  */
+    DEFAULT = 268,                 /* DEFAULT  */
+    BREAK = 269,                   /* BREAK  */
+    LE = 270,                      /* LE  */
+    GE = 271,                      /* GE  */
+    EQ = 272,                      /* EQ  */
+    NE = 273,                      /* NE  */
+    LT = 274,                      /* LT  */
+    GT = 275,                      /* GT  */
+    ASSIGN = 276,                  /* ASSIGN  */
+    PLUS = 277,                    /* PLUS  */
+    MINUS = 278,                   /* MINUS  */
+    MULT = 279,                    /* MULT  */
+    DIV = 280,                     /* DIV  */
+    SEMI = 281,                    /* SEMI  */
+    COLON = 282,                   /* COLON  */
+    LPAREN = 283,                  /* LPAREN  */
+    RPAREN = 284,                  /* RPAREN  */
+    LBRACE = 285,                  /* LBRACE  */
+    RBRACE = 286                   /* RBRACE  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -86,7 +91,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 133 "parser.y"
+#line 161 "parser.y"
 
     char *str;
     int quad_num;
@@ -98,7 +103,7 @@ union YYSTYPE
         struct Node *nextlist;
     } stmt;
 
-#line 102 "parser.tab.h"
+#line 107 "parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

@@ -151,6 +151,29 @@ struct Node {
 };
 
 /* =========================================================
+   SWITCH-CASE CONTEXT
+   ========================================================= */
+
+#define MAX_SWITCH_DEPTH 32
+#define MAX_SWITCH_CASES 100
+
+typedef struct {
+    char selector[32];
+
+    int dispatch_jump;
+    int default_target;
+
+    int case_count;
+    int case_values[MAX_SWITCH_CASES];
+    int case_targets[MAX_SWITCH_CASES];
+
+    Node *exitlist;
+} SwitchContext;
+
+SwitchContext switch_stack[MAX_SWITCH_DEPTH];
+int switch_depth = 0;
+
+/* =========================================================
    QUADRUPLE / THREE-ADDRESS CODE STRUCTURE
    ========================================================= */
 
@@ -191,13 +214,18 @@ char* newtemp();
 Node* makelist(int index);
 Node* merge(Node *l1, Node *l2);
 void backpatch(Node *list, int target_quad);
+void begin_switch(const char *selector);
+void finish_switch_case(int target, Node *nextlist);
+void finish_switch_default(int target, Node *nextlist);
+void emit_switch_break(void);
+void finish_switch(void);
 void print_tac();
 void print_quads();
 void execute_tac();
 void output_json();
 
 
-#line 201 "parser.tab.c"
+#line 229 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -236,33 +264,41 @@ enum yysymbol_kind_t
   YYSYMBOL_IF = 8,                         /* IF  */
   YYSYMBOL_ELSE = 9,                       /* ELSE  */
   YYSYMBOL_PRINT = 10,                     /* PRINT  */
-  YYSYMBOL_LE = 11,                        /* LE  */
-  YYSYMBOL_GE = 12,                        /* GE  */
-  YYSYMBOL_EQ = 13,                        /* EQ  */
-  YYSYMBOL_NE = 14,                        /* NE  */
-  YYSYMBOL_LT = 15,                        /* LT  */
-  YYSYMBOL_GT = 16,                        /* GT  */
-  YYSYMBOL_ASSIGN = 17,                    /* ASSIGN  */
-  YYSYMBOL_PLUS = 18,                      /* PLUS  */
-  YYSYMBOL_MINUS = 19,                     /* MINUS  */
-  YYSYMBOL_MULT = 20,                      /* MULT  */
-  YYSYMBOL_DIV = 21,                       /* DIV  */
-  YYSYMBOL_SEMI = 22,                      /* SEMI  */
-  YYSYMBOL_LPAREN = 23,                    /* LPAREN  */
-  YYSYMBOL_RPAREN = 24,                    /* RPAREN  */
-  YYSYMBOL_LBRACE = 25,                    /* LBRACE  */
-  YYSYMBOL_RBRACE = 26,                    /* RBRACE  */
-  YYSYMBOL_YYACCEPT = 27,                  /* $accept  */
-  YYSYMBOL_PROG = 28,                      /* PROG  */
-  YYSYMBOL_S_LIST = 29,                    /* S_LIST  */
-  YYSYMBOL_M = 30,                         /* M  */
-  YYSYMBOL_N = 31,                         /* N  */
-  YYSYMBOL_FOR_INIT = 32,                  /* FOR_INIT  */
-  YYSYMBOL_FOR_STEP = 33,                  /* FOR_STEP  */
-  YYSYMBOL_S = 34,                         /* S  */
-  YYSYMBOL_35_1 = 35,                      /* $@1  */
-  YYSYMBOL_C = 36,                         /* C  */
-  YYSYMBOL_E = 37                          /* E  */
+  YYSYMBOL_SWITCH = 11,                    /* SWITCH  */
+  YYSYMBOL_CASE = 12,                      /* CASE  */
+  YYSYMBOL_DEFAULT = 13,                   /* DEFAULT  */
+  YYSYMBOL_BREAK = 14,                     /* BREAK  */
+  YYSYMBOL_LE = 15,                        /* LE  */
+  YYSYMBOL_GE = 16,                        /* GE  */
+  YYSYMBOL_EQ = 17,                        /* EQ  */
+  YYSYMBOL_NE = 18,                        /* NE  */
+  YYSYMBOL_LT = 19,                        /* LT  */
+  YYSYMBOL_GT = 20,                        /* GT  */
+  YYSYMBOL_ASSIGN = 21,                    /* ASSIGN  */
+  YYSYMBOL_PLUS = 22,                      /* PLUS  */
+  YYSYMBOL_MINUS = 23,                     /* MINUS  */
+  YYSYMBOL_MULT = 24,                      /* MULT  */
+  YYSYMBOL_DIV = 25,                       /* DIV  */
+  YYSYMBOL_SEMI = 26,                      /* SEMI  */
+  YYSYMBOL_COLON = 27,                     /* COLON  */
+  YYSYMBOL_LPAREN = 28,                    /* LPAREN  */
+  YYSYMBOL_RPAREN = 29,                    /* RPAREN  */
+  YYSYMBOL_LBRACE = 30,                    /* LBRACE  */
+  YYSYMBOL_RBRACE = 31,                    /* RBRACE  */
+  YYSYMBOL_YYACCEPT = 32,                  /* $accept  */
+  YYSYMBOL_PROG = 33,                      /* PROG  */
+  YYSYMBOL_S_LIST = 34,                    /* S_LIST  */
+  YYSYMBOL_M = 35,                         /* M  */
+  YYSYMBOL_N = 36,                         /* N  */
+  YYSYMBOL_FOR_INIT = 37,                  /* FOR_INIT  */
+  YYSYMBOL_FOR_STEP = 38,                  /* FOR_STEP  */
+  YYSYMBOL_S = 39,                         /* S  */
+  YYSYMBOL_40_1 = 40,                      /* $@1  */
+  YYSYMBOL_41_2 = 41,                      /* $@2  */
+  YYSYMBOL_SWITCH_CASES = 42,              /* SWITCH_CASES  */
+  YYSYMBOL_SWITCH_DEFAULT = 43,            /* SWITCH_DEFAULT  */
+  YYSYMBOL_C = 44,                         /* C  */
+  YYSYMBOL_E = 45                          /* E  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -591,21 +627,21 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  16
+#define YYFINAL  20
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   120
+#define YYLAST   147
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  27
+#define YYNTOKENS  32
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  11
+#define YYNNTS  14
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  31
+#define YYNRULES  38
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  96
+#define YYNSTATES  116
 
 /* YYMAXUTOK -- Last valid token kind.  */
-#define YYMAXUTOK   281
+#define YYMAXUTOK   286
 
 
 /* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
@@ -647,17 +683,17 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
        5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
       15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
-      25,    26
+      25,    26,    27,    28,    29,    30,    31
 };
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,   163,   163,   173,   178,   186,   193,   200,   207,   214,
-     220,   226,   232,   238,   246,   257,   256,   272,   279,   285,
-     293,   301,   309,   317,   325,   335,   340,   347,   354,   361,
-     368,   373
+       0,   193,   193,   203,   208,   216,   223,   230,   237,   244,
+     250,   256,   262,   268,   276,   287,   286,   302,   308,   307,
+     316,   324,   364,   370,   379,   385,   391,   399,   407,   415,
+     423,   431,   441,   446,   453,   460,   467,   474,   479
 };
 #endif
 
@@ -674,10 +710,12 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
 static const char *const yytname[] =
 {
   "\"end of file\"", "error", "\"invalid token\"", "ID", "NUM",
-  "STRING_LITERAL", "WHILE", "FOR", "IF", "ELSE", "PRINT", "LE", "GE",
-  "EQ", "NE", "LT", "GT", "ASSIGN", "PLUS", "MINUS", "MULT", "DIV", "SEMI",
-  "LPAREN", "RPAREN", "LBRACE", "RBRACE", "$accept", "PROG", "S_LIST", "M",
-  "N", "FOR_INIT", "FOR_STEP", "S", "$@1", "C", "E", YY_NULLPTR
+  "STRING_LITERAL", "WHILE", "FOR", "IF", "ELSE", "PRINT", "SWITCH",
+  "CASE", "DEFAULT", "BREAK", "LE", "GE", "EQ", "NE", "LT", "GT", "ASSIGN",
+  "PLUS", "MINUS", "MULT", "DIV", "SEMI", "COLON", "LPAREN", "RPAREN",
+  "LBRACE", "RBRACE", "$accept", "PROG", "S_LIST", "M", "N", "FOR_INIT",
+  "FOR_STEP", "S", "$@1", "$@2", "SWITCH_CASES", "SWITCH_DEFAULT", "C",
+  "E", YY_NULLPTR
 };
 
 static const char *
@@ -687,12 +725,12 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-17)
+#define YYPACT_NINF (-25)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
 
-#define YYTABLE_NINF (-3)
+#define YYTABLE_NINF (-24)
 
 #define yytable_value_is_error(Yyn) \
   0
@@ -701,16 +739,18 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-       9,   -15,   -13,   -12,    -9,     8,     9,    25,    46,   -17,
-       1,   -17,     5,    32,    45,    30,   -17,     9,   -17,   -17,
-       1,    51,    32,    57,    36,    32,    39,    89,    54,    33,
-     -17,   -17,    41,     1,     1,     1,     1,   -17,    55,     1,
-     -17,    56,    75,   -17,     1,     1,     1,     1,     1,     1,
-      59,    60,   -17,    24,    24,   -17,   -17,   -17,     2,    32,
-     -17,    58,     2,     2,     2,     2,     2,     2,   -17,   -17,
-      67,    76,     9,     9,   -17,    71,    80,   108,   103,   -17,
-      96,   -17,   -17,     1,    90,   -17,     2,   -17,    91,    92,
-       9,     9,    93,    94,   -17,   -17
+       1,   -18,   -22,    -9,     9,    12,    20,   -16,     1,    29,
+      32,   -25,    10,   -25,    31,    24,    21,    10,   -25,    22,
+     -25,     1,   -25,   -25,    10,   117,    24,    33,    40,    24,
+      36,   105,    38,    39,    52,   -25,   -25,   109,    10,    10,
+      10,    10,   -25,    43,    10,   -25,    49,    90,   -25,    10,
+      10,    10,    10,    10,    10,    53,    54,    55,   -25,    18,
+      18,   -25,   -25,   -25,   122,    24,   -25,    56,   122,   122,
+     122,   122,   122,   122,   -25,   -25,   -25,    57,    64,     1,
+     -25,     1,   -25,    51,     4,    60,    66,    74,    89,    68,
+      65,   -25,    76,   -25,   -25,    72,   -25,   -25,    10,    71,
+     -25,   -25,     1,   122,   -25,    81,     1,    85,    87,     1,
+       8,     1,    95,   104,   -25,   -25
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -718,30 +758,32 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       0,     0,     0,     0,     0,     0,     0,     0,     5,     4,
-       0,     5,     0,     0,     0,     5,     1,     0,    30,    31,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
-      17,     3,     0,     0,     0,     0,     0,     9,     0,     0,
-       5,     0,     0,     5,     0,     0,     0,     0,     0,     0,
-       0,     0,    25,    26,    27,    28,    29,     5,     7,     0,
-      18,     0,    21,    22,    23,    24,    19,    20,    11,    10,
-       0,     0,     0,     0,     5,     5,     5,     0,    12,    14,
-       0,    15,     6,     0,     0,     5,     8,     5,     0,     0,
-       0,     0,     5,     5,    13,    16
+       5,     4,     0,     5,     0,     0,     0,     0,    20,     5,
+       1,     0,    37,    38,     0,     0,     0,     0,     0,     0,
+       0,     0,     0,     0,     0,    17,     3,     0,     0,     0,
+       0,     0,     9,     0,     0,     5,     0,     0,     5,     0,
+       0,     0,     0,     0,     0,     0,     0,     0,    32,    33,
+      34,    35,    36,     5,     7,     0,    25,     0,    28,    29,
+      30,    31,    26,    27,    11,    10,    18,     0,     0,     0,
+      22,     0,     5,     5,    24,     5,     0,    12,     0,     0,
+       0,    14,     0,    15,     6,     0,     5,    19,     0,     0,
+       5,     5,     0,     8,     5,     0,     0,     5,     0,     0,
+       5,     0,     5,     5,    13,    16
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -17,   -17,    -6,   -10,   -17,   -17,   -17,    98,   -17,   -16,
-      -7
+     -25,   -25,    -8,   -12,   -25,   -25,   -25,    97,   -25,   -25,
+     -25,   -25,   -24,     6
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     7,     8,    17,    85,    24,    81,     9,    84,    26,
-      27
+       0,     9,    10,    21,   100,    28,    93,    11,    99,    80,
+      84,    90,    30,    31
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -749,70 +791,76 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-      15,    22,    10,    21,    18,    19,    38,    29,    23,    41,
-      11,    12,     1,    32,    13,     2,     3,     4,    42,     5,
-      33,    34,    35,    36,    20,    16,    53,    54,    55,    56,
-      59,    14,    58,    61,     6,    18,    19,    62,    63,    64,
-      65,    66,    67,    71,    35,    36,    -2,    70,    18,    19,
-      28,    33,    34,    35,    36,    25,    30,    51,    40,    33,
-      34,    35,    36,    43,    77,    52,    75,    76,    20,    33,
-      34,    35,    36,    37,    39,    88,    86,    89,    50,    57,
-      60,    68,    69,    72,    92,    93,    44,    45,    46,    47,
-      48,    49,    73,    33,    34,    35,    36,    78,    74,    52,
-      44,    45,    46,    47,    48,    49,    79,    33,    34,    35,
-      36,    80,    82,    83,    87,    31,    90,    91,     0,    94,
-      95
+      19,    26,    43,    12,     1,    46,    13,     2,     3,     4,
+      18,     5,     6,    22,    23,     7,    88,    89,    25,    14,
+     -21,   -21,    33,    34,    22,    23,    32,    22,    23,    20,
+      37,     8,    -2,    65,    27,    47,    67,    15,    24,   -21,
+      16,    78,    40,    41,    59,    60,    61,    62,    17,    24,
+      64,    77,    29,    35,    44,    68,    69,    70,    71,    72,
+      73,    38,    39,    40,    41,    48,    45,    55,    56,    92,
+      86,    83,    63,    85,    38,    39,    40,    41,    66,    74,
+      75,    57,    87,    94,   102,    76,    79,    81,   105,   106,
+      82,    91,   108,    95,   107,    96,    97,    98,   110,   101,
+     104,   112,     0,   113,   103,    49,    50,    51,    52,    53,
+      54,   109,    38,    39,    40,    41,   -23,   111,    36,    58,
+      49,    50,    51,    52,    53,    54,   114,    38,    39,    40,
+      41,    38,    39,    40,    41,   115,     0,     0,    58,    38,
+      39,    40,    41,    42,    38,    39,    40,    41
 };
 
 static const yytype_int8 yycheck[] =
 {
-       6,    11,    17,    10,     3,     4,    22,    14,     3,    25,
-      23,    23,     3,    20,    23,     6,     7,     8,    25,    10,
-      18,    19,    20,    21,    23,     0,    33,    34,    35,    36,
-      40,    23,    39,    43,    25,     3,     4,    44,    45,    46,
-      47,    48,    49,    59,    20,    21,     0,    57,     3,     4,
-       5,    18,    19,    20,    21,    23,    26,    24,    22,    18,
-      19,    20,    21,    24,    74,    24,    72,    73,    23,    18,
-      19,    20,    21,    22,    17,    85,    83,    87,    24,    24,
-      24,    22,    22,    25,    90,    91,    11,    12,    13,    14,
-      15,    16,    25,    18,    19,    20,    21,    26,    22,    24,
-      11,    12,    13,    14,    15,    16,    26,    18,    19,    20,
-      21,     3,     9,    17,    24,    17,    25,    25,    -1,    26,
-      26
+       8,    13,    26,    21,     3,    29,    28,     6,     7,     8,
+      26,    10,    11,     3,     4,    14,    12,    13,    12,    28,
+      12,    13,    16,    17,     3,     4,     5,     3,     4,     0,
+      24,    30,     0,    45,     3,    29,    48,    28,    28,    31,
+      28,    65,    24,    25,    38,    39,    40,    41,    28,    28,
+      44,    63,    28,    31,    21,    49,    50,    51,    52,    53,
+      54,    22,    23,    24,    25,    29,    26,    29,    29,     3,
+      82,    79,    29,    81,    22,    23,    24,    25,    29,    26,
+      26,    29,    31,     9,    96,    30,    30,    30,   100,   101,
+      26,    31,   104,     4,   102,    27,    31,    21,   106,    27,
+      29,   109,    -1,   111,    98,    15,    16,    17,    18,    19,
+      20,    30,    22,    23,    24,    25,    31,    30,    21,    29,
+      15,    16,    17,    18,    19,    20,    31,    22,    23,    24,
+      25,    22,    23,    24,    25,    31,    -1,    -1,    29,    22,
+      23,    24,    25,    26,    22,    23,    24,    25
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,     3,     6,     7,     8,    10,    25,    28,    29,    34,
-      17,    23,    23,    23,    23,    29,     0,    30,     3,     4,
-      23,    37,    30,     3,    32,    23,    36,    37,     5,    37,
-      26,    34,    37,    18,    19,    20,    21,    22,    36,    17,
-      22,    36,    37,    24,    11,    12,    13,    14,    15,    16,
-      24,    24,    24,    37,    37,    37,    37,    24,    37,    30,
-      24,    30,    37,    37,    37,    37,    37,    37,    22,    22,
-      30,    36,    25,    25,    22,    29,    29,    30,    26,    26,
-       3,    33,     9,    17,    35,    31,    37,    24,    30,    30,
-      25,    25,    29,    29,    26,    26
+       0,     3,     6,     7,     8,    10,    11,    14,    30,    33,
+      34,    39,    21,    28,    28,    28,    28,    28,    26,    34,
+       0,    35,     3,     4,    28,    45,    35,     3,    37,    28,
+      44,    45,     5,    45,    45,    31,    39,    45,    22,    23,
+      24,    25,    26,    44,    21,    26,    44,    45,    29,    15,
+      16,    17,    18,    19,    20,    29,    29,    29,    29,    45,
+      45,    45,    45,    29,    45,    35,    29,    35,    45,    45,
+      45,    45,    45,    45,    26,    26,    30,    35,    44,    30,
+      41,    30,    26,    34,    42,    34,    35,    31,    12,    13,
+      43,    31,     3,    38,     9,     4,    27,    31,    21,    40,
+      36,    27,    35,    45,    29,    35,    35,    34,    35,    30,
+      34,    30,    34,    34,    31,    31
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    27,    28,    29,    29,    30,    31,    32,    33,    34,
-      34,    34,    34,    34,    34,    35,    34,    34,    36,    36,
-      36,    36,    36,    36,    36,    37,    37,    37,    37,    37,
-      37,    37
+       0,    32,    33,    34,    34,    35,    36,    37,    38,    39,
+      39,    39,    39,    39,    39,    40,    39,    39,    41,    39,
+      39,    42,    42,    43,    43,    44,    44,    44,    44,    44,
+      44,    44,    45,    45,    45,    45,    45,    45,    45
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     1,     3,     1,     0,     0,     3,     3,     4,
-       5,     5,     8,    14,     9,     0,    15,     3,     3,     3,
-       3,     3,     3,     3,     3,     3,     3,     3,     3,     3,
-       1,     1
+       5,     5,     8,    14,     9,     0,    15,     3,     0,     9,
+       2,     6,     0,     4,     0,     3,     3,     3,     3,     3,
+       3,     3,     3,     3,     3,     3,     3,     1,     1
 };
 
 
@@ -1389,115 +1437,115 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* PROG: S_LIST  */
-#line 164 "parser.y"
+#line 194 "parser.y"
       {
           backpatch((yyvsp[0].stmt).nextlist, quad_count);
           if (!json_output_mode) {
               printf("\n--- GENERATING INTERMEDIATE CODE ---\n");
           }
       }
-#line 1400 "parser.tab.c"
+#line 1448 "parser.tab.c"
     break;
 
   case 3: /* S_LIST: S_LIST M S  */
-#line 174 "parser.y"
+#line 204 "parser.y"
       {
           backpatch((yyvsp[-2].stmt).nextlist, (yyvsp[-1].quad_num));
           (yyval.stmt).nextlist = (yyvsp[0].stmt).nextlist;
       }
-#line 1409 "parser.tab.c"
+#line 1457 "parser.tab.c"
     break;
 
   case 4: /* S_LIST: S  */
-#line 179 "parser.y"
+#line 209 "parser.y"
       {
           (yyval.stmt).nextlist = (yyvsp[0].stmt).nextlist;
       }
-#line 1417 "parser.tab.c"
+#line 1465 "parser.tab.c"
     break;
 
   case 5: /* M: %empty  */
-#line 186 "parser.y"
+#line 216 "parser.y"
       {
           (yyval.quad_num) = nextquad();
       }
-#line 1425 "parser.tab.c"
+#line 1473 "parser.tab.c"
     break;
 
   case 6: /* N: %empty  */
-#line 193 "parser.y"
+#line 223 "parser.y"
       {
           (yyval.stmt).nextlist = makelist(nextquad());
           emit_loc("goto", "", "", "_", (yyloc).first_line, (yyloc).first_column);
       }
-#line 1434 "parser.tab.c"
+#line 1482 "parser.tab.c"
     break;
 
   case 7: /* FOR_INIT: ID ASSIGN E  */
-#line 201 "parser.y"
+#line 231 "parser.y"
       {
           emit_loc("=", (yyvsp[0].str), "", (yyvsp[-2].str), (yylsp[-2]).first_line, (yylsp[-2]).first_column);
       }
-#line 1442 "parser.tab.c"
+#line 1490 "parser.tab.c"
     break;
 
   case 8: /* FOR_STEP: ID ASSIGN E  */
-#line 208 "parser.y"
+#line 238 "parser.y"
       {
           emit_loc("=", (yyvsp[0].str), "", (yyvsp[-2].str), (yylsp[-2]).first_line, (yylsp[-2]).first_column);
       }
-#line 1450 "parser.tab.c"
+#line 1498 "parser.tab.c"
     break;
 
   case 9: /* S: ID ASSIGN E SEMI  */
-#line 215 "parser.y"
+#line 245 "parser.y"
       {
           emit_loc("=", (yyvsp[-1].str), "", (yyvsp[-3].str), (yylsp[-3]).first_line, (yylsp[-3]).first_column);
           (yyval.stmt).nextlist = NULL;
       }
-#line 1459 "parser.tab.c"
+#line 1507 "parser.tab.c"
     break;
 
   case 10: /* S: PRINT LPAREN E RPAREN SEMI  */
-#line 221 "parser.y"
+#line 251 "parser.y"
       {
           emit_loc("print", (yyvsp[-2].str), "", "", (yylsp[-4]).first_line, (yylsp[-4]).first_column);
           (yyval.stmt).nextlist = NULL;
       }
-#line 1468 "parser.tab.c"
+#line 1516 "parser.tab.c"
     break;
 
   case 11: /* S: PRINT LPAREN STRING_LITERAL RPAREN SEMI  */
-#line 227 "parser.y"
+#line 257 "parser.y"
       {
           emit_loc("print_str", (yyvsp[-2].str), "", "", (yylsp[-4]).first_line, (yylsp[-4]).first_column);
           (yyval.stmt).nextlist = NULL;
       }
-#line 1477 "parser.tab.c"
+#line 1525 "parser.tab.c"
     break;
 
   case 12: /* S: IF LPAREN C RPAREN M LBRACE S_LIST RBRACE  */
-#line 233 "parser.y"
+#line 263 "parser.y"
       {
           backpatch((yyvsp[-5].expr).truelist, (yyvsp[-3].quad_num));
           (yyval.stmt).nextlist = merge((yyvsp[-5].expr).falselist, (yyvsp[-1].stmt).nextlist);
       }
-#line 1486 "parser.tab.c"
+#line 1534 "parser.tab.c"
     break;
 
   case 13: /* S: IF LPAREN C RPAREN M LBRACE S_LIST RBRACE ELSE N M LBRACE S_LIST RBRACE  */
-#line 239 "parser.y"
+#line 269 "parser.y"
       {
           backpatch((yyvsp[-11].expr).truelist, (yyvsp[-9].quad_num));
           backpatch((yyvsp[-11].expr).falselist, (yyvsp[-3].quad_num));
           Node *temp = merge((yyvsp[-7].stmt).nextlist, (yyvsp[-4].stmt).nextlist);
           (yyval.stmt).nextlist = merge(temp, (yyvsp[-1].stmt).nextlist);
       }
-#line 1497 "parser.tab.c"
+#line 1545 "parser.tab.c"
     break;
 
   case 14: /* S: WHILE LPAREN M C RPAREN M LBRACE S_LIST RBRACE  */
-#line 247 "parser.y"
+#line 277 "parser.y"
       {          
           backpatch((yyvsp[-5].expr).truelist, (yyvsp[-3].quad_num));
           char loop_target[16];
@@ -1506,21 +1554,21 @@ yyreduce:
           backpatch((yyvsp[-1].stmt).nextlist, (yyvsp[-6].quad_num));
           (yyval.stmt).nextlist = (yyvsp[-5].expr).falselist;
       }
-#line 1510 "parser.tab.c"
+#line 1558 "parser.tab.c"
     break;
 
   case 15: /* $@1: %empty  */
-#line 257 "parser.y"
+#line 287 "parser.y"
       {
           char cond_target[16];
           sprintf(cond_target, "%d", (yyvsp[-4].quad_num));
           emit_loc("goto", "", "", cond_target, (yylsp[-8]).first_line, (yylsp[-8]).first_column);
       }
-#line 1520 "parser.tab.c"
+#line 1568 "parser.tab.c"
     break;
 
   case 16: /* S: FOR LPAREN FOR_INIT SEMI M C SEMI M FOR_STEP $@1 RPAREN M LBRACE S_LIST RBRACE  */
-#line 263 "parser.y"
+#line 293 "parser.y"
       {
           backpatch((yyvsp[-9].expr).truelist, (yyvsp[-3].quad_num));
           backpatch((yyvsp[-1].stmt).nextlist, (yyvsp[-7].quad_num));
@@ -1529,158 +1577,255 @@ yyreduce:
           emit_loc("goto", "", "", step_target, (yylsp[-14]).first_line, (yylsp[-14]).first_column);
           (yyval.stmt).nextlist = (yyvsp[-9].expr).falselist;
       }
-#line 1533 "parser.tab.c"
+#line 1581 "parser.tab.c"
     break;
 
   case 17: /* S: LBRACE S_LIST RBRACE  */
-#line 273 "parser.y"
+#line 303 "parser.y"
       {
           (yyval.stmt).nextlist = (yyvsp[-1].stmt).nextlist;
       }
-#line 1541 "parser.tab.c"
+#line 1589 "parser.tab.c"
     break;
 
-  case 18: /* C: LPAREN C RPAREN  */
-#line 280 "parser.y"
+  case 18: /* $@2: %empty  */
+#line 308 "parser.y"
+      {
+          begin_switch((yyvsp[-2].str));
+      }
+#line 1597 "parser.tab.c"
+    break;
+
+  case 19: /* S: SWITCH LPAREN E RPAREN LBRACE $@2 SWITCH_CASES SWITCH_DEFAULT RBRACE  */
+#line 312 "parser.y"
+      {
+          finish_switch();
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1606 "parser.tab.c"
+    break;
+
+  case 20: /* S: BREAK SEMI  */
+#line 317 "parser.y"
+      {
+          emit_switch_break();
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1615 "parser.tab.c"
+    break;
+
+  case 21: /* SWITCH_CASES: SWITCH_CASES CASE NUM COLON M S_LIST  */
+#line 325 "parser.y"
+      {
+          (yyval.stmt).nextlist = NULL;
+
+          if (switch_depth > 0) {
+              SwitchContext *ctx = &switch_stack[switch_depth - 1];
+              int value = atoi((yyvsp[-3].str));
+              int duplicate = 0;
+
+              for (int i = 0; i < ctx->case_count; i++) {
+                  if (ctx->case_values[i] == value) {
+                      duplicate = 1;
+                      break;
+                  }
+              }
+
+              if (duplicate) {
+                  add_diagnostic(
+                      "error",
+                      "Duplicate case value in switch",
+                      (yylsp[-3]).first_line,
+                      (yylsp[-3]).first_column
+                  );
+              } else if (ctx->case_count < MAX_SWITCH_CASES) {
+                  ctx->case_values[ctx->case_count] = value;
+                  ctx->case_targets[ctx->case_count] = (yyvsp[-1].quad_num);
+                  ctx->case_count++;
+              } else {
+                  add_diagnostic(
+                      "error",
+                      "Maximum number of switch cases exceeded",
+                      (yylsp[-3]).first_line,
+                      (yylsp[-3]).first_column
+                  );
+              }
+
+              finish_switch_case((yyvsp[-1].quad_num), (yyvsp[0].stmt).nextlist);
+          }
+      }
+#line 1658 "parser.tab.c"
+    break;
+
+  case 22: /* SWITCH_CASES: %empty  */
+#line 364 "parser.y"
+      {
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1666 "parser.tab.c"
+    break;
+
+  case 23: /* SWITCH_DEFAULT: DEFAULT COLON M S_LIST  */
+#line 371 "parser.y"
+      {
+          (yyval.stmt).nextlist = NULL;
+
+          if (switch_depth > 0) {
+              finish_switch_default((yyvsp[-1].quad_num), (yyvsp[0].stmt).nextlist);
+          }
+      }
+#line 1678 "parser.tab.c"
+    break;
+
+  case 24: /* SWITCH_DEFAULT: %empty  */
+#line 379 "parser.y"
+      {
+          (yyval.stmt).nextlist = NULL;
+      }
+#line 1686 "parser.tab.c"
+    break;
+
+  case 25: /* C: LPAREN C RPAREN  */
+#line 386 "parser.y"
       {
           (yyval.expr).truelist = (yyvsp[-1].expr).truelist;
           (yyval.expr).falselist = (yyvsp[-1].expr).falselist;
       }
-#line 1550 "parser.tab.c"
+#line 1695 "parser.tab.c"
     break;
 
-  case 19: /* C: E LT E  */
-#line 286 "parser.y"
+  case 26: /* C: E LT E  */
+#line 392 "parser.y"
       {
           (yyval.expr).truelist = makelist(nextquad());
           (yyval.expr).falselist = makelist(nextquad() + 1);
           emit_loc("<", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1561 "parser.tab.c"
+#line 1706 "parser.tab.c"
     break;
 
-  case 20: /* C: E GT E  */
-#line 294 "parser.y"
+  case 27: /* C: E GT E  */
+#line 400 "parser.y"
       {
           (yyval.expr).truelist = makelist(nextquad());
           (yyval.expr).falselist = makelist(nextquad() + 1);
           emit_loc(">", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1572 "parser.tab.c"
+#line 1717 "parser.tab.c"
     break;
 
-  case 21: /* C: E LE E  */
-#line 302 "parser.y"
+  case 28: /* C: E LE E  */
+#line 408 "parser.y"
       {
           (yyval.expr).truelist = makelist(nextquad());
           (yyval.expr).falselist = makelist(nextquad() + 1);
           emit_loc("<=", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1583 "parser.tab.c"
+#line 1728 "parser.tab.c"
     break;
 
-  case 22: /* C: E GE E  */
-#line 310 "parser.y"
+  case 29: /* C: E GE E  */
+#line 416 "parser.y"
       {
           (yyval.expr).truelist = makelist(nextquad());
           (yyval.expr).falselist = makelist(nextquad() + 1);
           emit_loc(">=", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1594 "parser.tab.c"
+#line 1739 "parser.tab.c"
     break;
 
-  case 23: /* C: E EQ E  */
-#line 318 "parser.y"
+  case 30: /* C: E EQ E  */
+#line 424 "parser.y"
       {
           (yyval.expr).truelist = makelist(nextquad());
           (yyval.expr).falselist = makelist(nextquad() + 1);
           emit_loc("==", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1605 "parser.tab.c"
+#line 1750 "parser.tab.c"
     break;
 
-  case 24: /* C: E NE E  */
-#line 326 "parser.y"
+  case 31: /* C: E NE E  */
+#line 432 "parser.y"
       {
           (yyval.expr).truelist = makelist(nextquad());
           (yyval.expr).falselist = makelist(nextquad() + 1);
           emit_loc("!=", (yyvsp[-2].str), (yyvsp[0].str), "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           emit_loc("goto", "", "", "_", (yylsp[-1]).first_line, (yylsp[-1]).first_column);
       }
-#line 1616 "parser.tab.c"
+#line 1761 "parser.tab.c"
     break;
 
-  case 25: /* E: LPAREN E RPAREN  */
-#line 336 "parser.y"
+  case 32: /* E: LPAREN E RPAREN  */
+#line 442 "parser.y"
       {
           (yyval.str) = (yyvsp[-1].str);
       }
-#line 1624 "parser.tab.c"
+#line 1769 "parser.tab.c"
     break;
 
-  case 26: /* E: E PLUS E  */
-#line 341 "parser.y"
+  case 33: /* E: E PLUS E  */
+#line 447 "parser.y"
       {
           char *temp = newtemp();
           emit_loc("+", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1634 "parser.tab.c"
+#line 1779 "parser.tab.c"
     break;
 
-  case 27: /* E: E MINUS E  */
-#line 348 "parser.y"
+  case 34: /* E: E MINUS E  */
+#line 454 "parser.y"
       {
           char *temp = newtemp();
           emit_loc("-", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1644 "parser.tab.c"
+#line 1789 "parser.tab.c"
     break;
 
-  case 28: /* E: E MULT E  */
-#line 355 "parser.y"
+  case 35: /* E: E MULT E  */
+#line 461 "parser.y"
       {
           char *temp = newtemp();
           emit_loc("*", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1654 "parser.tab.c"
+#line 1799 "parser.tab.c"
     break;
 
-  case 29: /* E: E DIV E  */
-#line 362 "parser.y"
+  case 36: /* E: E DIV E  */
+#line 468 "parser.y"
       {
           char *temp = newtemp();
           emit_loc("/", (yyvsp[-2].str), (yyvsp[0].str), temp, (yylsp[-1]).first_line, (yylsp[-1]).first_column);
           (yyval.str) = temp;
       }
-#line 1664 "parser.tab.c"
+#line 1809 "parser.tab.c"
     break;
 
-  case 30: /* E: ID  */
-#line 369 "parser.y"
+  case 37: /* E: ID  */
+#line 475 "parser.y"
       {
           (yyval.str) = (yyvsp[0].str);
       }
-#line 1672 "parser.tab.c"
+#line 1817 "parser.tab.c"
     break;
 
-  case 31: /* E: NUM  */
-#line 374 "parser.y"
+  case 38: /* E: NUM  */
+#line 480 "parser.y"
       {
           (yyval.str) = (yyvsp[0].str);
       }
-#line 1680 "parser.tab.c"
+#line 1825 "parser.tab.c"
     break;
 
 
-#line 1684 "parser.tab.c"
+#line 1829 "parser.tab.c"
 
       default: break;
     }
@@ -1878,7 +2023,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 379 "parser.y"
+#line 485 "parser.y"
 
 
 int nextquad() {
@@ -1971,6 +2116,191 @@ void backpatch(Node *list, int target_quad) {
         }
         curr = curr->next;
     }
+}
+
+/* =========================================================
+   SWITCH-CASE IMPLEMENTATION
+   ========================================================= */
+
+void begin_switch(const char *selector) {
+    if (switch_depth >= MAX_SWITCH_DEPTH) {
+        add_diagnostic(
+            "error",
+            "Maximum nested switch depth exceeded",
+            current_line,
+            current_col
+        );
+        return;
+    }
+
+    SwitchContext *ctx = &switch_stack[switch_depth++];
+
+    memset(ctx, 0, sizeof(*ctx));
+
+    strncpy(ctx->selector, selector, sizeof(ctx->selector) - 1);
+    ctx->selector[sizeof(ctx->selector) - 1] = '\0';
+
+    ctx->default_target = -1;
+    ctx->exitlist = NULL;
+
+    /* Skip the case bodies initially and jump to dispatch code. */
+    ctx->dispatch_jump = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+}
+
+void finish_switch_case(int target, Node *nextlist) {
+    if (switch_depth <= 0)
+        return;
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    /* Resolve pending control flow at the end of this case body. */
+    backpatch(nextlist, nextquad());
+
+
+    /*
+       The case value and target are recorded by the grammar action
+       before this function is called.
+    */
+
+    /* Prevent fall-through: each completed case exits the switch. */
+    int exit_quad = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+
+    ctx->exitlist = merge(ctx->exitlist, makelist(exit_quad));
+    (void)target;
+}
+
+void finish_switch_default(int target, Node *nextlist) {
+    if (switch_depth <= 0)
+        return;
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    if (ctx->default_target != -1) {
+        add_diagnostic(
+            "error",
+            "Duplicate default label in switch",
+            current_line,
+            current_col
+        );
+        return;
+    }
+
+    backpatch(nextlist, nextquad());
+    ctx->default_target = target;
+
+    /* Default branch also exits the switch after executing. */
+    int exit_quad = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+
+    ctx->exitlist = merge(ctx->exitlist, makelist(exit_quad));
+}
+
+void emit_switch_break(void) {
+    if (switch_depth <= 0) {
+        add_diagnostic(
+            "error",
+            "'break' is only supported inside a switch statement",
+            current_line,
+            current_col
+        );
+        return;
+    }
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    int break_quad = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+
+    ctx->exitlist = merge(ctx->exitlist, makelist(break_quad));
+}
+
+void finish_switch(void) {
+    if (switch_depth <= 0)
+        return;
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    /* The dispatch block begins after all case bodies. */
+    int dispatch_target = nextquad();
+    backpatch(makelist(ctx->dispatch_jump), dispatch_target);
+
+    /* Each comparison branches directly to its matching case. */
+    for (int i = 0; i < ctx->case_count; i++) {
+        char case_value[32];
+        char case_target[32];
+
+        snprintf(
+            case_value,
+            sizeof(case_value),
+            "%d",
+            ctx->case_values[i]
+        );
+
+        snprintf(
+            case_target,
+            sizeof(case_target),
+            "%d",
+            ctx->case_targets[i]
+        );
+
+        emit_loc(
+            "==",
+            ctx->selector,
+            case_value,
+            case_target,
+            current_line,
+            current_col
+        );
+    }
+
+    if (ctx->default_target >= 0) {
+        char default_target[32];
+
+        snprintf(
+            default_target,
+            sizeof(default_target),
+            "%d",
+            ctx->default_target
+        );
+
+        emit_loc(
+            "goto",
+            "",
+            "",
+            default_target,
+            current_line,
+            current_col
+        );
+    } else {
+        /*
+           No matching case and no default: continue after the
+           dispatch block.
+        */
+        char end_target[32];
+
+        snprintf(
+            end_target,
+            sizeof(end_target),
+            "%d",
+            nextquad() + 1
+        );
+
+        emit_loc(
+            "goto",
+            "",
+            "",
+            end_target,
+            current_line,
+            current_col
+        );
+    }
+
+    /* All case exits and break statements converge here. */
+    backpatch(ctx->exitlist, nextquad());
+
+    switch_depth--;
 }
 
 void print_backpatch_logs() {

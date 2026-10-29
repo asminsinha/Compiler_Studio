@@ -1,8 +1,28 @@
-node_modules/
-dist/
 .DS_Store
 *.pyc
-__pycache__/
-venv/
+
 .system_generated/
 temp_input.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node.js
+node_modules/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Generated compiler files
+compiler
+lex.yy.c
+parser.tab.c
+parser.tab.h
+
+# Build output
+frontend/dist/

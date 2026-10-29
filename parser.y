@@ -81,6 +81,29 @@ struct Node {
 };
 
 /* =========================================================
+   SWITCH-CASE CONTEXT
+   ========================================================= */
+
+#define MAX_SWITCH_DEPTH 32
+#define MAX_SWITCH_CASES 100
+
+typedef struct {
+    char selector[32];
+
+    int dispatch_jump;
+    int default_target;
+
+    int case_count;
+    int case_values[MAX_SWITCH_CASES];
+    int case_targets[MAX_SWITCH_CASES];
+
+    Node *exitlist;
+} SwitchContext;
+
+SwitchContext switch_stack[MAX_SWITCH_DEPTH];
+int switch_depth = 0;
+
+/* =========================================================
    QUADRUPLE / THREE-ADDRESS CODE STRUCTURE
    ========================================================= */
 
@@ -121,6 +144,11 @@ char* newtemp();
 Node* makelist(int index);
 Node* merge(Node *l1, Node *l2);
 void backpatch(Node *list, int target_quad);
+void begin_switch(const char *selector);
+void finish_switch_case(int target, Node *nextlist);
+void finish_switch_default(int target, Node *nextlist);
+void emit_switch_break(void);
+void finish_switch(void);
 void print_tac();
 void print_quads();
 void execute_tac();
@@ -144,15 +172,17 @@ void output_json();
 
 %token <str> ID NUM STRING_LITERAL
 %token WHILE FOR IF ELSE PRINT
+%token SWITCH CASE DEFAULT BREAK
 %token LE GE EQ NE LT GT ASSIGN
 %token PLUS MINUS MULT DIV
-%token SEMI LPAREN RPAREN LBRACE RBRACE
+%token SEMI COLON LPAREN RPAREN LBRACE RBRACE
 
 %type <str> E
 %type <expr> C
 %type <stmt> S S_LIST
 %type <quad_num> M
 %type <stmt> N
+%type <stmt> SWITCH_CASES SWITCH_DEFAULT
 
 %left PLUS MINUS
 %left MULT DIV
@@ -272,6 +302,82 @@ S
     | LBRACE S_LIST RBRACE
       {
           $$.nextlist = $2.nextlist;
+      }
+    
+    | SWITCH LPAREN E RPAREN LBRACE
+      {
+          begin_switch($3);
+      }
+      SWITCH_CASES SWITCH_DEFAULT RBRACE
+      {
+          finish_switch();
+          $$.nextlist = NULL;
+      }
+    | BREAK SEMI
+      {
+          emit_switch_break();
+          $$.nextlist = NULL;
+      }
+    ;
+
+SWITCH_CASES
+    : SWITCH_CASES CASE NUM COLON M S_LIST
+      {
+          $$.nextlist = NULL;
+
+          if (switch_depth > 0) {
+              SwitchContext *ctx = &switch_stack[switch_depth - 1];
+              int value = atoi($3);
+              int duplicate = 0;
+
+              for (int i = 0; i < ctx->case_count; i++) {
+                  if (ctx->case_values[i] == value) {
+                      duplicate = 1;
+                      break;
+                  }
+              }
+
+              if (duplicate) {
+                  add_diagnostic(
+                      "error",
+                      "Duplicate case value in switch",
+                      @3.first_line,
+                      @3.first_column
+                  );
+              } else if (ctx->case_count < MAX_SWITCH_CASES) {
+                  ctx->case_values[ctx->case_count] = value;
+                  ctx->case_targets[ctx->case_count] = $5;
+                  ctx->case_count++;
+              } else {
+                  add_diagnostic(
+                      "error",
+                      "Maximum number of switch cases exceeded",
+                      @3.first_line,
+                      @3.first_column
+                  );
+              }
+
+              finish_switch_case($5, $6.nextlist);
+          }
+      }
+    | /* empty */
+      {
+          $$.nextlist = NULL;
+      }
+    ;
+
+SWITCH_DEFAULT
+    : DEFAULT COLON M S_LIST
+      {
+          $$.nextlist = NULL;
+
+          if (switch_depth > 0) {
+              finish_switch_default($3, $4.nextlist);
+          }
+      }
+    | /* empty */
+      {
+          $$.nextlist = NULL;
       }
     ;
 
@@ -468,6 +574,191 @@ void backpatch(Node *list, int target_quad) {
         }
         curr = curr->next;
     }
+}
+
+/* =========================================================
+   SWITCH-CASE IMPLEMENTATION
+   ========================================================= */
+
+void begin_switch(const char *selector) {
+    if (switch_depth >= MAX_SWITCH_DEPTH) {
+        add_diagnostic(
+            "error",
+            "Maximum nested switch depth exceeded",
+            current_line,
+            current_col
+        );
+        return;
+    }
+
+    SwitchContext *ctx = &switch_stack[switch_depth++];
+
+    memset(ctx, 0, sizeof(*ctx));
+
+    strncpy(ctx->selector, selector, sizeof(ctx->selector) - 1);
+    ctx->selector[sizeof(ctx->selector) - 1] = '\0';
+
+    ctx->default_target = -1;
+    ctx->exitlist = NULL;
+
+    /* Skip the case bodies initially and jump to dispatch code. */
+    ctx->dispatch_jump = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+}
+
+void finish_switch_case(int target, Node *nextlist) {
+    if (switch_depth <= 0)
+        return;
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    /* Resolve pending control flow at the end of this case body. */
+    backpatch(nextlist, nextquad());
+
+
+    /*
+       The case value and target are recorded by the grammar action
+       before this function is called.
+    */
+
+    /* Prevent fall-through: each completed case exits the switch. */
+    int exit_quad = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+
+    ctx->exitlist = merge(ctx->exitlist, makelist(exit_quad));
+    (void)target;
+}
+
+void finish_switch_default(int target, Node *nextlist) {
+    if (switch_depth <= 0)
+        return;
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    if (ctx->default_target != -1) {
+        add_diagnostic(
+            "error",
+            "Duplicate default label in switch",
+            current_line,
+            current_col
+        );
+        return;
+    }
+
+    backpatch(nextlist, nextquad());
+    ctx->default_target = target;
+
+    /* Default branch also exits the switch after executing. */
+    int exit_quad = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+
+    ctx->exitlist = merge(ctx->exitlist, makelist(exit_quad));
+}
+
+void emit_switch_break(void) {
+    if (switch_depth <= 0) {
+        add_diagnostic(
+            "error",
+            "'break' is only supported inside a switch statement",
+            current_line,
+            current_col
+        );
+        return;
+    }
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    int break_quad = nextquad();
+    emit_loc("goto", "", "", "_", current_line, current_col);
+
+    ctx->exitlist = merge(ctx->exitlist, makelist(break_quad));
+}
+
+void finish_switch(void) {
+    if (switch_depth <= 0)
+        return;
+
+    SwitchContext *ctx = &switch_stack[switch_depth - 1];
+
+    /* The dispatch block begins after all case bodies. */
+    int dispatch_target = nextquad();
+    backpatch(makelist(ctx->dispatch_jump), dispatch_target);
+
+    /* Each comparison branches directly to its matching case. */
+    for (int i = 0; i < ctx->case_count; i++) {
+        char case_value[32];
+        char case_target[32];
+
+        snprintf(
+            case_value,
+            sizeof(case_value),
+            "%d",
+            ctx->case_values[i]
+        );
+
+        snprintf(
+            case_target,
+            sizeof(case_target),
+            "%d",
+            ctx->case_targets[i]
+        );
+
+        emit_loc(
+            "==",
+            ctx->selector,
+            case_value,
+            case_target,
+            current_line,
+            current_col
+        );
+    }
+
+    if (ctx->default_target >= 0) {
+        char default_target[32];
+
+        snprintf(
+            default_target,
+            sizeof(default_target),
+            "%d",
+            ctx->default_target
+        );
+
+        emit_loc(
+            "goto",
+            "",
+            "",
+            default_target,
+            current_line,
+            current_col
+        );
+    } else {
+        /*
+           No matching case and no default: continue after the
+           dispatch block.
+        */
+        char end_target[32];
+
+        snprintf(
+            end_target,
+            sizeof(end_target),
+            "%d",
+            nextquad() + 1
+        );
+
+        emit_loc(
+            "goto",
+            "",
+            "",
+            end_target,
+            current_line,
+            current_col
+        );
+    }
+
+    /* All case exits and break statements converge here. */
+    backpatch(ctx->exitlist, nextquad());
+
+    switch_depth--;
 }
 
 void print_backpatch_logs() {

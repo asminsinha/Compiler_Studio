@@ -36,6 +36,12 @@ void record_lexical_error(const char *msg, int line, int col);
 "else"          { update_location(yyleng); record_token("ELSE", yytext, yylloc.first_line, yylloc.first_column); return ELSE; }
 "while"         { update_location(yyleng); record_token("WHILE", yytext, yylloc.first_line, yylloc.first_column); return WHILE; }
 "for"           { update_location(yyleng); record_token("FOR", yytext, yylloc.first_line, yylloc.first_column); return FOR; }
+":"    { update_location(yyleng); record_token("COLON", yytext, yylloc.first_line, yylloc.first_column); return COLON; }
+"switch"        { update_location(yyleng); record_token("SWITCH", yytext, yylloc.first_line, yylloc.first_column); return SWITCH; }
+"case"          { update_location(yyleng); record_token("CASE", yytext, yylloc.first_line, yylloc.first_column); return CASE; }
+"default"       { update_location(yyleng); record_token("DEFAULT", yytext, yylloc.first_line, yylloc.first_column); return DEFAULT; }
+"break"         { update_location(yyleng); record_token("BREAK", yytext, yylloc.first_line, yylloc.first_column); return BREAK; }
+
 
 [a-zA-Z_][a-zA-Z0-9_]* { 
     update_location(yyleng);
